@@ -147,6 +147,13 @@ def process_excel(file_stream, file_extension):
         logger.debug(f"Created new sheet: {new_sheet_name}")
         write_summary(new_sheet, attended, not_attended)
 
+    # Remove "Evaluation Warning" sheet if it exists
+    for sheet in workbook.worksheets:
+        if sheet.name == "Evaluation Warning":
+            workbook.worksheets.remove(sheet)
+            logger.debug("Removed 'Evaluation Warning' sheet")
+            break
+
     output_stream = BytesIO()
     workbook.save(output_stream, ac.SaveFormat.XLSX)
     output_stream.seek(0)
@@ -167,7 +174,6 @@ def index():
     </body>
     </html>
     """
-
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
