@@ -1,4 +1,5 @@
 from flask import Flask, request, send_file, jsonify
+from flask import Response
 import aspose.cells as ac
 from io import BytesIO
 import uuid
@@ -85,7 +86,7 @@ def process_excel(file_stream, file_extension):
     file_content = file_stream.read()
     buffered_stream = BytesIO(file_content)
     logger.info(f"Processing file with extension: {file_extension}, Size: {len(file_content)} bytes")
-    
+
     if file_extension == '.xls':
         repaired_stream = repair_xls(file_stream)
         if repaired_stream:
@@ -94,7 +95,7 @@ def process_excel(file_stream, file_extension):
             logger.debug("Using repaired .xlsx stream for analysis")
         else:
             logger.warning("Repair failed; attempting to process original .xls file")
-    
+
     try:
         if file_extension == '.xls':
             workbook = ac.Workbook(buffered_stream, ac.LoadOptions(ac.LoadFormat.EXCEL_97_TO_2003))
@@ -105,36 +106,47 @@ def process_excel(file_stream, file_extension):
     except Exception as e:
         logger.error(f"Failed to load workbook: {str(e)}")
         raise
-    
+
     input_sheet = workbook.worksheets[0]
     logger.debug(f"Loaded sheet: {input_sheet.name}, Rows: {input_sheet.cells.max_row}, Columns: {input_sheet.cells.max_column}")
-    
-    first_row = [input_sheet.cells.get(1, col).value for col in range(input_sheet.cells.max_column)]
-    logger.debug(f"First row content (week headers): {first_row}")
-    
+
+    # Detect month transitions and week columns
     week_cols = []
-    month_prefix = "2025年1月"
+    current_month = "2025年1月"  # Default to January
     for col in range(START_COLUMN, input_sheet.cells.max_column + 1):
-        header = str(input_sheet.cells.get(1, col).value or "")
-        if "週" in header:
-            week_cols.append((col, header))
-        elif col > START_COLUMN and "第一週" not in header:  # Stop at February
-            if "2025年2月" in str(input_sheet.cells.get(0, col).value or ""):
-                month_prefix = "2025年2月"
-            break
-    logger.info(f"Detected week columns: {week_cols}")
-    
+        month_header = str(input_sheet.cells.get(0, col).value or "")
+        week_header = str(input_sheet.cells.get(1, col).value or "")
+        if "2025年" in month_header:
+            current_month = month_header.strip()  # Update month prefix
+        if "週" in week_header:
+            week_cols.append((col, week_header, current_month))
+
+    logger.info(f"Detected week columns with months: {week_cols}")
+
     if not week_cols:
         logger.warning("No week columns detected; output will lack analytic sheets")
-    
-    for col, week_name in week_cols:
-        logger.info(f"Processing week: {week_name}")
+
+    for col, week_name, month_prefix in week_cols:
+        logger.info(f"Processing week: {week_name} in {month_prefix}")
         attended, not_attended = classify_attendance(input_sheet, col)
+
+        # Skip sheet creation if no one attended
+        if not any(attended.values()):
+            logger.info(f"No attendees for {week_name} in {month_prefix}, skipping sheet creation")
+            continue
+
         new_sheet_name = f"{month_prefix}{week_name} 主日"
+
+        # Check for duplicate sheet names
+        existing_names = [sheet.name for sheet in workbook.worksheets]
+        if new_sheet_name in existing_names:
+            logger.error(f"Duplicate sheet name detected: {new_sheet_name}")
+            raise ValueError(f"Sheet name '{new_sheet_name}' already exists")
+
         new_sheet = workbook.worksheets.add(new_sheet_name)
         logger.debug(f"Created new sheet: {new_sheet_name}")
         write_summary(new_sheet, attended, not_attended)
-    
+
     output_stream = BytesIO()
     workbook.save(output_stream, ac.SaveFormat.XLSX)
     output_stream.seek(0)
@@ -156,6 +168,7 @@ def index():
     </html>
     """
 
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     logger.info("Received upload request")
@@ -175,12 +188,10 @@ def upload_file():
     try:
         output_stream = process_excel(file.stream, file_extension)
         logger.info("Sending analyzed file for download")
-        return send_file(
-            output_stream,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=f"analyzed_{uuid.uuid4().hex}.xlsx"
-        )
+        output_stream.seek(0)
+        response = Response(output_stream.read(), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response.headers["Content-Disposition"] = f"attachment; filename=analyzed_{uuid.uuid4().hex}.xlsx"
+        return response
     except Exception as e:
         logger.error(f"Processing error: {str(e)}")
         logger.debug(f"Full traceback: {traceback.format_exc()}")
