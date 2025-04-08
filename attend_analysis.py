@@ -58,26 +58,21 @@ def write_summary(sheet, attended, not_attended):
     districts = sorted(set(attended.keys()).union(not_attended.keys()))
     row = 0
     
-    # Write district headers
     for i, district in enumerate(districts):
-        sheet.cells.get(row, i * 2).value = district
-        sheet.cells.get(row, i * 2 + 1).value = district
-        sheet.cells.get(row + 1, i * 2).value = "本週到會"  # "Attended this week"
-        sheet.cells.get(row + 1, i * 2 + 1).value = "未到會"  # "Not attended"
-
-    # Determine the maximum number of rows needed for names
-    max_len = max(max(len(attended.get(d, [])), len(not_attended.get(d, []))) for d in districts)
+        sheet.cells.put_value(row, i * 2, district)
+        sheet.cells.put_value(row, i * 2 + 1, district)
+        sheet.cells.put_value(row + 1, i * 2, "本週到會")
+        sheet.cells.put_value(row + 1, i * 2 + 1, "未到會")
     
-    # Write attendance lists
+    max_len = max(max(len(attended.get(d, [])), len(not_attended.get(d, []))) for d in districts)
     for r in range(max_len):
         for i, district in enumerate(districts):
             attended_list = attended.get(district, [])
             not_attended_list = not_attended.get(district, [])
             if r < len(attended_list):
-                sheet.cells.get(r + 2, i * 2).value = attended_list[r]
+                sheet.cells.put_value(r + 2, i * 2, attended_list[r])
             if r < len(not_attended_list):
-                sheet.cells.get(r + 2, i * 2 + 1).value = not_attended_list[r]
-    
+                sheet.cells.put_value(r + 2, i * 2 + 1, not_attended_list[r])
     logger.debug("Summary written successfully")
 
 def process_excel(file_stream, file_extension):
@@ -85,7 +80,7 @@ def process_excel(file_stream, file_extension):
     file_content = file_stream.read()
     buffered_stream = BytesIO(file_content)
     logger.info(f"Processing file with extension: {file_extension}, Size: {len(file_content)} bytes")
-
+    
     if file_extension == '.xls':
         repaired_stream = repair_xls(file_stream)
         if repaired_stream:
@@ -94,7 +89,7 @@ def process_excel(file_stream, file_extension):
             logger.debug("Using repaired .xlsx stream for analysis")
         else:
             logger.warning("Repair failed; attempting to process original .xls file")
-
+    
     try:
         if file_extension == '.xls':
             workbook = ac.Workbook(buffered_stream, ac.LoadOptions(ac.LoadFormat.EXCEL_97_TO_2003))
@@ -105,42 +100,36 @@ def process_excel(file_stream, file_extension):
     except Exception as e:
         logger.error(f"Failed to load workbook: {str(e)}")
         raise
-
+    
     input_sheet = workbook.worksheets[0]
     logger.debug(f"Loaded sheet: {input_sheet.name}, Rows: {input_sheet.cells.max_row}, Columns: {input_sheet.cells.max_column}")
-
-    # Detect month transitions and week columns
+    
+    first_row = [input_sheet.cells.get(1, col).value for col in range(input_sheet.cells.max_column)]
+    logger.debug(f"First row content (week headers): {first_row}")
+    
     week_cols = []
-    current_month = "2025年1月"  # Default to January
+    month_prefix = "2025年1月"
     for col in range(START_COLUMN, input_sheet.cells.max_column + 1):
-        month_header = str(input_sheet.cells.get(0, col).value or "")
-        week_header = str(input_sheet.cells.get(1, col).value or "")
-        if "2025年" in month_header:
-            current_month = month_header.strip()  # Update month prefix
-        if "週" in week_header:
-            week_cols.append((col, week_header, current_month))
-
-    logger.info(f"Detected week columns with months: {week_cols}")
-
+        header = str(input_sheet.cells.get(1, col).value or "")
+        if "週" in header:
+            week_cols.append((col, header))
+        elif col > START_COLUMN and "第一週" not in header:  # Stop at February
+            if "2025年2月" in str(input_sheet.cells.get(0, col).value or ""):
+                month_prefix = "2025年2月"
+            break
+    logger.info(f"Detected week columns: {week_cols}")
+    
     if not week_cols:
         logger.warning("No week columns detected; output will lack analytic sheets")
-
-    for col, week_name, month_prefix in week_cols:
-        logger.info(f"Processing week: {week_name} in {month_prefix}")
+    
+    for col, week_name in week_cols:
+        logger.info(f"Processing week: {week_name}")
         attended, not_attended = classify_attendance(input_sheet, col)
         new_sheet_name = f"{month_prefix}{week_name} 主日"
-
-        # Check for duplicate sheet names
-        existing_names = [sheet.name for sheet in workbook.worksheets]
-        if new_sheet_name in existing_names:
-            logger.error(f"Duplicate sheet name detected: {new_sheet_name}")
-            raise ValueError(f"Sheet name '{new_sheet_name}' already exists")
-
         new_sheet = workbook.worksheets.add(new_sheet_name)
         logger.debug(f"Created new sheet: {new_sheet_name}")
         write_summary(new_sheet, attended, not_attended)
-
-
+    
     output_stream = BytesIO()
     workbook.save(output_stream, ac.SaveFormat.XLSX)
     output_stream.seek(0)
@@ -202,4 +191,3 @@ if __name__ == '__main__':
     port = get_port()
     logger.info(f"Starting server on port {port}")
     app.run(debug=True, host='0.0.0.0', port=port)
-
