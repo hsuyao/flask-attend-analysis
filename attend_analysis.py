@@ -19,6 +19,7 @@ START_COLUMN = 8
 latest_analytic_date = None
 latest_attendance_data = None  # {'attended': {}, 'not_attended': {}}
 latest_file_stream = None
+latest_week_display = None
 
 def chinese_to_int(chinese_num):
     """Convert Chinese numerals to Arabic integers."""
@@ -69,7 +70,7 @@ def classify_attendance(sheet, week_col):
 
 def write_summary(sheet, attended, not_attended):
     logger.debug(f"Writing summary with attended: {attended}, not_attended: {not_attended}")
-    districts = sorted(set(attended.keys()).union(not_attended.keys()))
+    districts = sorted(set(attended.keys()).union(not_attended.keys()), key=lambda x: chinese_to_int(x[3:4]))
     row = 0
 
     for i, district in enumerate(districts):
@@ -91,7 +92,7 @@ def write_summary(sheet, attended, not_attended):
     logger.debug("Summary written successfully")
 
 def process_excel(file_stream, file_extension):
-    global latest_analytic_date, latest_attendance_data, latest_file_stream
+    global latest_analytic_date, latest_attendance_data, latest_file_stream, latest_week_display
     file_stream.seek(0)
     file_content = file_stream.read()
     buffered_stream = BytesIO(file_content)
@@ -138,6 +139,7 @@ def process_excel(file_stream, file_extension):
     latest_date = None
     latest_attended = None
     latest_not_attended = None
+    latest_week = None
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
         attended, not_attended = classify_attendance(input_sheet, col)
@@ -155,6 +157,7 @@ def process_excel(file_stream, file_extension):
             latest_date = current_date
             latest_attended = attended
             latest_not_attended = not_attended
+            latest_week = f"{month_prefix}{week_name}"
 
         existing_names = [sheet.name for sheet in workbook.worksheets]
         if new_sheet_name in existing_names:
@@ -174,7 +177,8 @@ def process_excel(file_stream, file_extension):
     if latest_date:
         latest_analytic_date = latest_date.strftime("%Y年%m月%d日")
         latest_attendance_data = {'attended': latest_attended, 'not_attended': latest_not_attended}
-        logger.debug(f"Updated latest_analytic_date to: {latest_analytic_date}")
+        latest_week_display = latest_week
+        logger.debug(f"Updated latest_analytic_date to: {latest_analytic_date}, latest_week_display to: {latest_week_display}")
 
     output_stream = BytesIO()
     workbook.save(output_stream, ac.SaveFormat.XLSX)
@@ -185,13 +189,15 @@ def process_excel(file_stream, file_extension):
 
 @app.route('/')
 def index():
-    global latest_analytic_date, latest_attendance_data
+    global latest_analytic_date, latest_attendance_data, latest_week_display
     latest_date_display = latest_analytic_date if latest_analytic_date else "No analytics available yet"
+    week_display = latest_week_display if latest_week_display else "No week data available yet"
     
-    # Build Excel-style table HTML with districts parallel
     table_html = ""
     if latest_attendance_data:
-        districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()))
+        # Sort districts by numeric order (e.g., 一區 before 二區)
+        districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
+                          key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
         
         table_html = """
@@ -199,19 +205,16 @@ def index():
             <table class="excel-table">
                 <tr class="header">
         """
-        # District headers spanning two columns
         for district in districts:
             table_html += f'<th colspan="2">{district}</th>'
         table_html += """
                 </tr>
                 <tr class="subheader">
         """
-        # Subheaders for Attended and Not Attended under each district
         for _ in districts:
             table_html += '<th>本週到會</th><th>未到會</th>'
         table_html += "</tr>"
 
-        # Data rows
         for r in range(max_len):
             row_class = "even" if r % 2 == 0 else "odd"
             table_html += f'<tr class="{row_class}">'
@@ -273,6 +276,9 @@ def index():
             .button:hover {{
                 background-color: #006d9e;
             }}
+            .week-display {{
+                margin-top: 10px;
+            }}
         </style>
     </head>
     <body>
@@ -284,6 +290,7 @@ def index():
         </form>
         {download_button}
         <h3>Latest Attendance Data</h3>
+        <div class="week-display">{week_display}</div>
         {table_html}
     </body>
     </html>
