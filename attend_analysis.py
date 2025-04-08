@@ -57,22 +57,27 @@ def write_summary(sheet, attended, not_attended):
     logger.debug(f"Writing summary with attended: {attended}, not_attended: {not_attended}")
     districts = sorted(set(attended.keys()).union(not_attended.keys()))
     row = 0
-    
+
+    # Write district headers
     for i, district in enumerate(districts):
-        sheet.cells.put_value(row, i * 2, district)
-        sheet.cells.put_value(row, i * 2 + 1, district)
-        sheet.cells.put_value(row + 1, i * 2, "本週到會")
-        sheet.cells.put_value(row + 1, i * 2 + 1, "未到會")
-    
+        sheet.cells.get(row, i * 2).value = district
+        sheet.cells.get(row, i * 2 + 1).value = district
+        sheet.cells.get(row + 1, i * 2).value = "本週到會"  # "Attended this week"
+        sheet.cells.get(row + 1, i * 2 + 1).value = "未到會"  # "Not attended"
+
+    # Determine the maximum number of rows needed for names
     max_len = max(max(len(attended.get(d, [])), len(not_attended.get(d, []))) for d in districts)
+
+    # Write attendance lists
     for r in range(max_len):
         for i, district in enumerate(districts):
             attended_list = attended.get(district, [])
             not_attended_list = not_attended.get(district, [])
             if r < len(attended_list):
-                sheet.cells.put_value(r + 2, i * 2, attended_list[r])
+                sheet.cells.get(r + 2, i * 2).value = attended_list[r]
             if r < len(not_attended_list):
-                sheet.cells.put_value(r + 2, i * 2 + 1, not_attended_list[r])
+                sheet.cells.get(r + 2, i * 2 + 1).value = not_attended_list[r]
+
     logger.debug("Summary written successfully")
 
 def process_excel(file_stream, file_extension):
