@@ -426,7 +426,7 @@ def upload_file():
     except Exception as e:
         logger.error(f"Processing error: {str(e)}")
         logger.debug(f"Full traceback: {traceback.format_exc()}")
-        return jsonify({"error": f"Processing failed: {str(e)}"), 500
+        return jsonify({"error": f"Processing failed: {str(e)}"}), 500
 
 @app.route('/download', methods=['GET'])
 def download_file():
