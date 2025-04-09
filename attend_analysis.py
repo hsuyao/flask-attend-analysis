@@ -22,6 +22,7 @@ latest_file_stream = None
 latest_week_display = None
 latest_district_counts = None  # {'district': {'total': count, 'ages': {'age': count}}, '總計': total}
 latest_main_district = None  # Main district name
+all_attendance_data = []  # List of (date, {'attended': {}, 'not_attended': {}}, week_display) for all weeks
 
 def chinese_to_int(chinese_num):
     """Convert Chinese numerals to Arabic integers."""
@@ -116,7 +117,7 @@ def write_summary(sheet, attended, not_attended):
     logger.debug("Summary written successfully")
 
 def process_excel(file_stream, file_extension):
-    global latest_analytic_date, latest_attendance_data, latest_file_stream, latest_week_display, latest_district_counts, latest_main_district
+    global latest_analytic_date, latest_attendance_data, latest_file_stream, latest_week_display, latest_district_counts, latest_main_district, all_attendance_data
     file_stream.seek(0)
     file_content = file_stream.read()
     buffered_stream = BytesIO(file_content)
@@ -160,6 +161,8 @@ def process_excel(file_stream, file_extension):
     if not week_cols:
         logger.warning("No week columns detected; output will lack analytic sheets")
 
+    # Clear previous data
+    all_attendance_data = []
     latest_date = None
     latest_attended = None
     latest_not_attended = None
@@ -178,6 +181,10 @@ def process_excel(file_stream, file_extension):
         week_num = chinese_to_int(week_str)
         month_num = int(month_prefix.split("年")[1].replace("月", ""))
         current_date = datetime(2025, month_num, min(week_num * 7, 28))
+        
+        # Store attendance data for this week
+        all_attendance_data.append((current_date, {'attended': attended, 'not_attended': not_attended}, f"{month_prefix}{week_name}"))
+
         if latest_date is None or current_date > latest_date:
             latest_date = current_date
             latest_attended = attended
@@ -216,17 +223,28 @@ def process_excel(file_stream, file_extension):
 
 @app.route('/')
 def index():
-    global latest_analytic_date, latest_attendance_data, latest_week_display, latest_district_counts, latest_main_district
+    global latest_analytic_date, latest_attendance_data, latest_week_display, latest_district_counts, latest_main_district, all_attendance_data
     latest_date_display = latest_analytic_date if latest_analytic_date else "No analytics available yet"
     week_display = latest_week_display if latest_week_display else "No week data available yet"
-
+    
     combined_table_html = ""
     if latest_attendance_data and latest_district_counts:
-        districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()),
+        districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
                           key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
         stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
         age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+        
+        # Find previous week's data
+        previous_week_data = None
+        if len(all_attendance_data) > 1:
+            # Sort by date to ensure we get the correct previous week
+            all_attendance_data.sort(key=lambda x: x[0])  # Sort by date
+            latest_date = all_attendance_data[-1][0]  # Latest week
+            for date, data, week_name in reversed(all_attendance_data[:-1]):  # Exclude the latest week
+                if date < latest_date:
+                    previous_week_data = data
+                    break
 
         combined_table_html = """
         <div class="table-wrapper">
@@ -321,7 +339,21 @@ def index():
                     attended = attended[:4]
                 if not_attended and len(not_attended) > 4:
                     not_attended = not_attended[:4]
-                combined_table_html += f'<td>{attended}</td><td>{not_attended}</td>'
+
+                # Compare with previous week
+                attended_class = ''
+                not_attended_class = ''
+                if previous_week_data:
+                    prev_attended = previous_week_data['attended'].get(district, [])
+                    prev_not_attended = previous_week_data['not_attended'].get(district, [])
+                    # If this week attended but last week not attended -> highlight green
+                    if attended and attended in prev_not_attended:
+                        attended_class = 'highlight-green'
+                    # If this week not attended but last week attended -> highlight red
+                    if not_attended and not_attended in prev_attended:
+                        not_attended_class = 'highlight-red'
+
+                combined_table_html += f'<td class="{attended_class}">{attended}</td><td class="{not_attended_class}">{not_attended}</td>'
             # Separator column
             combined_table_html += '<td class="separator"></td>'
             # Stats columns
@@ -347,7 +379,7 @@ def index():
         combined_table_html += "</table></div>"
 
     download_button = '<form action="/download" method="get"><input type="submit" value="Download Processed XLS" class="button"></form>' if latest_file_stream else ''
-
+    
     return f"""
     <!DOCTYPE html>
     <html>
@@ -413,6 +445,12 @@ def index():
                 font-weight: bold;
                 padding: 2px; /* Reduced padding */
                 line-height: 1.2; /* Reduced line-height */
+            }}
+            .excel-table .highlight-green {{
+                background-color: #90EE90; /* Light green for improved attendance */
+            }}
+            .excel-table .highlight-red {{
+                background-color: #FFB6C1; /* Light red for declined attendance */
             }}
             .button {{
                 background-color: #005566; /* Match title row */
