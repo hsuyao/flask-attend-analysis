@@ -21,6 +21,7 @@ latest_attendance_data = None  # {'attended': {}, 'not_attended': {}}
 latest_file_stream = None
 latest_week_display = None
 latest_district_counts = None  # {'district': {'total': count, 'ages': {'age': count}}, '總計': total}
+latest_main_district = None  # Main district name
 
 def chinese_to_int(chinese_num):
     """Convert Chinese numerals to Arabic integers."""
@@ -48,20 +49,27 @@ def repair_xls(file_stream):
         return None
 
 def classify_attendance(sheet, week_col):
+    global latest_main_district
     logger.debug(f"Classifying attendance for week column: {week_col}")
     attended = {}
     not_attended = {}
     district_counts = {}
     youth_above = {'年長', '中壯', '青壯', '青職'}
-    age_categories = ['青職以上', '中學', '大專', '大學', '小學', '學齡前']
+    age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     max_row = sheet.cells.max_row
     
     for row in range(2, max_row + 1):
-        district = f"{sheet.cells.get(row, 0).value}{sheet.cells.get(row, 1).value}"
+        main_district = str(sheet.cells.get(row, 0).value or "").strip()  # Column A
+        sub_district = str(sheet.cells.get(row, 1).value or "").strip()  # Column B
+        district = f"{main_district}{sub_district}"
         name = sheet.cells.get(row, 3).value
         age = str(sheet.cells.get(row, 5).value or "").strip()  # Age in column F (5)
-        if not name or not district.startswith("二大區"):
+        if not name or not district.startswith(main_district):
             continue
+        # Set main district name from first valid row
+        if latest_main_district is None and main_district:
+            latest_main_district = main_district
+            logger.debug(f"Set main district name to: {latest_main_district}")
         attendance = sheet.cells.get(row, week_col).value
         if attendance == 1:
             if district not in attended:
@@ -108,7 +116,7 @@ def write_summary(sheet, attended, not_attended):
     logger.debug("Summary written successfully")
 
 def process_excel(file_stream, file_extension):
-    global latest_analytic_date, latest_attendance_data, latest_file_stream, latest_week_display, latest_district_counts
+    global latest_analytic_date, latest_attendance_data, latest_file_stream, latest_week_display, latest_district_counts, latest_main_district
     file_stream.seek(0)
     file_content = file_stream.read()
     buffered_stream = BytesIO(file_content)
@@ -208,7 +216,7 @@ def process_excel(file_stream, file_extension):
 
 @app.route('/')
 def index():
-    global latest_analytic_date, latest_attendance_data, latest_week_display, latest_district_counts
+    global latest_analytic_date, latest_attendance_data, latest_week_display, latest_district_counts, latest_main_district
     latest_date_display = latest_analytic_date if latest_analytic_date else "No analytics available yet"
     week_display = latest_week_display if latest_week_display else "No week data available yet"
     
@@ -218,7 +226,7 @@ def index():
                           key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
         stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
-        age_categories = ['青職以上', '中學', '大專', '大學', '小學', '學齡前']
+        age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
         
         combined_table_html = """
         <div class="table-wrapper">
@@ -226,21 +234,21 @@ def index():
                 <tr class="title-row">
         """
         total_attendance_cols = len(districts) * 2
-        combined_table_html += f'<th colspan="{total_attendance_cols}">{week_display}</th><th colspan="2"></th>'
+        combined_table_html += f'<th colspan="{total_attendance_cols + 1}">{week_display}</th><th colspan="2"></th>'
         combined_table_html += """
                 </tr>
                 <tr class="header">
         """
         for district in districts:
             combined_table_html += f'<th colspan="2">{district}</th>'
-        combined_table_html += '<th>區</th><th>出席人數</th>'
+        combined_table_html += '<th class="separator"></th><th></th><th></th>'
         combined_table_html += """
                 </tr>
                 <tr class="subheader">
         """
         for _ in districts:
             combined_table_html += '<th>本週到會</th><th>未到會</th>'
-        combined_table_html += '<th></th><th></th>'
+        combined_table_html += '<th class="separator"></th><th></th><th></th>'
         combined_table_html += "</tr>"
 
         # Precompute stats rows
@@ -248,16 +256,32 @@ def index():
         row_index = 0
         for district in stats_districts:
             row_class = "even" if row_index % 2 == 0 else "odd"
-            stats_rows.append((row_class, f'<td>{district}</td><td>{latest_district_counts[district]["total"]}</td>'))
+            stats_rows.append((row_class, f'<td colspan="2" class="district-header">{district}</td>'))
             row_index += 1
             for age in age_categories:
                 count = latest_district_counts[district]['ages'][age]
                 row_class = "even" if row_index % 2 == 0 else "odd"
                 stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">{age}</td><td class="sub-row">{count}</td>'))
                 row_index += 1
+            total = latest_district_counts[district]['total']
+            row_class = "even" if row_index % 2 == 0 else "odd"
+            stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">總計</td><td class="sub-row">{total}</td>'))
+            row_index += 1
+
+        # Main district statistics
+        main_district = latest_main_district if latest_main_district else "未知大區"
+        overall_ages = {age: sum(latest_district_counts[d]['ages'][age] for d in stats_districts) for age in age_categories}
         total_attendance = latest_district_counts['總計']
         row_class = "even" if row_index % 2 == 0 else "odd"
-        stats_rows.append((row_class, f'<td>總計</td><td>{total_attendance}</td>'))
+        stats_rows.append((row_class, f'<td colspan="2" class="district-header">{main_district}</td>'))
+        row_index += 1
+        for age in age_categories:
+            count = overall_ages[age]
+            row_class = "even" if row_index % 2 == 0 else "odd"
+            stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">{age}</td><td class="sub-row">{count}</td>'))
+            row_index += 1
+        row_class = "even" if row_index % 2 == 0 else "odd"
+        stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">總計</td><td class="sub-row">{total_attendance}</td>'))
 
         # Render table rows
         for r in range(max_len):
@@ -270,6 +294,8 @@ def index():
                 attended = attended_list[r] if r < len(attended_list) else ''
                 not_attended = not_attended_list[r] if r < len(not_attended_list) else ''
                 combined_table_html += f'<td>{attended}</td><td>{not_attended}</td>'
+            # Separator column
+            combined_table_html += '<td class="separator"></td>'
             # Stats columns
             if r < len(stats_rows):
                 row_class, stats_cells = stats_rows[r]
@@ -278,12 +304,13 @@ def index():
                 combined_table_html += '<td></td><td></td>'
             combined_table_html += '</tr>'
 
-        # Add remaining stats rows if any
+        # Add remaining stats rows
         for r in range(max_len, len(stats_rows)):
             row_class, stats_cells = stats_rows[r]
             combined_table_html += f'<tr class="{row_class}">'
             for _ in districts:
                 combined_table_html += '<td></td><td></td>'
+            combined_table_html += '<td class="separator"></td>'
             combined_table_html += stats_cells
             combined_table_html += '</tr>'
 
@@ -312,8 +339,12 @@ def index():
                 vertical-align: top;
                 min-width: 70px;
             }}
+            .excel-table .separator {{
+                min-width: 10px;
+                width: 10px;
+            }}
             .excel-table .title-row th {{
-                background-color: #005566; /* Blue from screenshot */
+                background-color: #005566; /* Dark blue from screenshot */
                 color: white;
                 text-align: center;
                 font-weight: bold;
@@ -328,13 +359,21 @@ def index():
             }}
             .excel-table tr.even {{
                 background-color: #F3F2F1; /* Light gray from screenshot */
+                color: black;
             }}
             .excel-table tr.odd {{
                 background-color: #FFFFFF; /* White from screenshot */
+                color: black;
             }}
             .excel-table .sub-row {{
-                background-color: #E1DFDD; /* Subtle gray from screenshot */
+                background-color: #E1DFDD; /* Subtle gray for stats sub-rows */
                 font-size: 0.85em;
+            }}
+            .excel-table .district-header {{
+                background-color: #107C10; /* Match header row */
+                color: white;
+                text-align: center;
+                font-weight: bold;
             }}
             .button {{
                 background-color: #005566; /* Match title row */
@@ -345,7 +384,7 @@ def index():
                 margin-top: 10px;
             }}
             .button:hover {{
-                background-color: #003f4c; /* Darker blue */
+                background-color: #003f4c; /* Darker blue from screenshot */
             }}
         </style>
     </head>
@@ -387,7 +426,7 @@ def upload_file():
     except Exception as e:
         logger.error(f"Processing error: {str(e)}")
         logger.debug(f"Full traceback: {traceback.format_exc()}")
-        return jsonify({"error": f"Processing failed: {str(e)}"}), 500
+        return jsonify({"error": f"Processing failed: {str(e)}"), 500
 
 @app.route('/download', methods=['GET'])
 def download_file():
