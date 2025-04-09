@@ -219,37 +219,19 @@ def index():
     global latest_analytic_date, latest_attendance_data, latest_week_display, latest_district_counts, latest_main_district
     latest_date_display = latest_analytic_date if latest_analytic_date else "No analytics available yet"
     week_display = latest_week_display if latest_week_display else "No week data available yet"
-    
+
     combined_table_html = ""
     if latest_attendance_data and latest_district_counts:
-        districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
+        districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()),
                           key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
         stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
         age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
-        
+
         combined_table_html = """
         <div class="table-wrapper">
             <table class="excel-table">
-                <tr class="title-row">
         """
-        total_attendance_cols = len(districts) * 2
-        combined_table_html += f'<th colspan="{total_attendance_cols + 1}">{week_display}</th><th colspan="2"></th>'
-        combined_table_html += """
-                </tr>
-                <tr class="header">
-        """
-        for district in districts:
-            combined_table_html += f'<th colspan="2">{district}</th>'
-        combined_table_html += '<th class="separator"></th><th></th><th></th>'
-        combined_table_html += """
-                </tr>
-                <tr class="subheader">
-        """
-        for _ in districts:
-            combined_table_html += '<th>本週到會</th><th>未到會</th>'
-        combined_table_html += '<th class="separator"></th><th></th><th></th>'
-        combined_table_html += "</tr>"
 
         # Precompute stats rows
         stats_rows = []
@@ -283,7 +265,48 @@ def index():
         row_class = "even" if row_index % 2 == 0 else "odd"
         stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">總計</td><td class="sub-row">{total_attendance}</td>'))
 
-        # Render table rows
+        # Render table rows, starting stats from row 0
+        stats_index = 0
+        total_attendance_cols = len(districts) * 2
+
+        # Title row (row 0)
+        combined_table_html += f'<tr class="title-row">'
+        combined_table_html += f'<th colspan="{total_attendance_cols + 1}">{week_display}</th>'
+        if stats_index < len(stats_rows):
+            row_class, stats_cells = stats_rows[stats_index]
+            combined_table_html += stats_cells
+            stats_index += 1
+        else:
+            combined_table_html += '<td></td><td></td>'
+        combined_table_html += '</tr>'
+
+        # Header row
+        combined_table_html += '<tr class="header">'
+        for district in districts:
+            combined_table_html += f'<th colspan="2">{district}</th>'
+        combined_table_html += '<th class="separator"></th>'
+        if stats_index < len(stats_rows):
+            row_class, stats_cells = stats_rows[stats_index]
+            combined_table_html += stats_cells
+            stats_index += 1
+        else:
+            combined_table_html += '<td></td><td></td>'
+        combined_table_html += '</tr>'
+
+        # Subheader row
+        combined_table_html += '<tr class="subheader">'
+        for _ in districts:
+            combined_table_html += '<th>本週到會</th><th>未到會</th>'
+        combined_table_html += '<th class="separator"></th>'
+        if stats_index < len(stats_rows):
+            row_class, stats_cells = stats_rows[stats_index]
+            combined_table_html += stats_cells
+            stats_index += 1
+        else:
+            combined_table_html += '<td></td><td></td>'
+        combined_table_html += '</tr>'
+
+        # Data rows
         for r in range(max_len):
             row_class = "even" if r % 2 == 0 else "odd"
             combined_table_html += f'<tr class="{row_class}">'
@@ -297,27 +320,29 @@ def index():
             # Separator column
             combined_table_html += '<td class="separator"></td>'
             # Stats columns
-            if r < len(stats_rows):
-                row_class, stats_cells = stats_rows[r]
+            if stats_index < len(stats_rows):
+                row_class, stats_cells = stats_rows[stats_index]
                 combined_table_html += stats_cells
+                stats_index += 1
             else:
                 combined_table_html += '<td></td><td></td>'
             combined_table_html += '</tr>'
 
         # Add remaining stats rows
-        for r in range(max_len, len(stats_rows)):
-            row_class, stats_cells = stats_rows[r]
+        while stats_index < len(stats_rows):
+            row_class, stats_cells = stats_rows[stats_index]
             combined_table_html += f'<tr class="{row_class}">'
             for _ in districts:
                 combined_table_html += '<td></td><td></td>'
             combined_table_html += '<td class="separator"></td>'
             combined_table_html += stats_cells
+            stats_index += 1
             combined_table_html += '</tr>'
 
         combined_table_html += "</table></div>"
 
     download_button = '<form action="/download" method="get"><input type="submit" value="Download Processed XLS" class="button"></form>' if latest_file_stream else ''
-    
+
     return f"""
     <!DOCTYPE html>
     <html>
