@@ -212,88 +212,82 @@ def index():
     latest_date_display = latest_analytic_date if latest_analytic_date else "No analytics available yet"
     week_display = latest_week_display if latest_week_display else "No week data available yet"
     
-    district_table_html = ""
-    if latest_attendance_data:
+    combined_table_html = ""
+    if latest_attendance_data and latest_district_counts:
         districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
                           key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
+        stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
+        age_categories = ['青職以上', '中學', '大學', '小學', '學齡前']
         
-        district_table_html = """
-        <div class="table-wrapper district-table">
+        combined_table_html = """
+        <div class="table-wrapper">
             <table class="excel-table">
                 <tr class="title-row">
         """
-        total_columns = len(districts) * 2
-        district_table_html += f'<th colspan="{total_columns}">{week_display}</th>'
-        district_table_html += """
+        total_attendance_cols = len(districts) * 2
+        combined_table_html += f'<th colspan="{total_attendance_cols}">{week_display}</th><th colspan="2"></th>'
+        combined_table_html += """
                 </tr>
                 <tr class="header">
         """
         for district in districts:
-            district_table_html += f'<th colspan="2">{district}</th>'
-        district_table_html += """
+            combined_table_html += f'<th colspan="2">{district}</th>'
+        combined_table_html += '<th>區</th><th>出席人數</th>'
+        combined_table_html += """
                 </tr>
                 <tr class="subheader">
         """
         for _ in districts:
-            district_table_html += '<th>本週到會</th><th>未到會</th>'
-        district_table_html += "</tr>"
+            combined_table_html += '<th>本週到會</th><th>未到會</th>'
+        combined_table_html += '<th></th><th></th>'
+        combined_table_html += "</tr>"
 
+        # Precompute stats rows
+        stats_rows = []
+        row_index = 0
+        for district in stats_districts:
+            row_class = "even" if row_index % 2 == 0 else "odd"
+            stats_rows.append((row_class, f'<td>{district}</td><td>{latest_district_counts[district]["total"]}</td>'))
+            row_index += 1
+            for age in age_categories:
+                count = latest_district_counts[district]['ages'][age]
+                row_class = "even" if row_index % 2 == 0 else "odd"
+                stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">{age}</td><td class="sub-row">{count}</td>'))
+                row_index += 1
+        total_attendance = latest_district_counts['總計']
+        row_class = "even" if row_index % 2 == 0 else "odd"
+        stats_rows.append((row_class, f'<td>總計</td><td>{total_attendance}</td>'))
+
+        # Render table rows
         for r in range(max_len):
             row_class = "even" if r % 2 == 0 else "odd"
-            district_table_html += f'<tr class="{row_class}">'
+            combined_table_html += f'<tr class="{row_class}">'
+            # Attendance columns
             for district in districts:
                 attended_list = latest_attendance_data['attended'].get(district, [])
                 not_attended_list = latest_attendance_data['not_attended'].get(district, [])
                 attended = attended_list[r] if r < len(attended_list) else ''
                 not_attended = not_attended_list[r] if r < len(not_attended_list) else ''
-                district_table_html += f'<td>{attended}</td><td>{not_attended}</td>'
-            district_table_html += '</tr>'
-        district_table_html += "</table></div>"
+                combined_table_html += f'<td>{attended}</td><td>{not_attended}</td>'
+            # Stats columns
+            if r < len(stats_rows):
+                row_class, stats_cells = stats_rows[r]
+                combined_table_html += stats_cells
+            else:
+                combined_table_html += '<td></td><td></td>'
+            combined_table_html += '</tr>'
 
-    stats_table_html = ""
-    if latest_district_counts:
-        stats_table_html = """
-        <div class="table-wrapper stats-table-wrapper">
-            <table class="excel-table stats-table">
-                <tr class="header">
-                    <th>區</th>
-                    <th>出席人數</th>
-                </tr>
-        """
-        districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
-        age_categories = ['青職以上', '中學', '大學', '小學', '學齡前']
-        row_index = 0
-        for district in districts:
-            total = latest_district_counts[district]['total']
-            row_class = "even" if row_index % 2 == 0 else "odd"
-            stats_table_html += f"""
-                <tr class="{row_class}">
-                    <td>{district}</td>
-                    <td>{total}</td>
-                </tr>
-            """
-            row_index += 1
-            for age in age_categories:
-                count = latest_district_counts[district]['ages'][age]
-                row_class = "even" if row_index % 2 == 0 else "odd"
-                stats_table_html += f"""
-                    <tr class="{row_class} sub-row">
-                        <td style="padding-left: 20px;">{age}</td>
-                        <td>{count}</td>
-                    </tr>
-                """
-                row_index += 1
-        # Add total row
-        total_attendance = latest_district_counts['總計']
-        row_class = "even" if row_index % 2 == 0 else "odd"
-        stats_table_html += f"""
-            <tr class="{row_class}">
-                <td>總計</td>
-                <td>{total_attendance}</td>
-            </tr>
-        """
-        stats_table_html += "</table></div>"
+        # Add remaining stats rows if any
+        for r in range(max_len, len(stats_rows)):
+            row_class, stats_cells = stats_rows[r]
+            combined_table_html += f'<tr class="{row_class}">'
+            for _ in districts:
+                combined_table_html += '<td></td><td></td>'
+            combined_table_html += stats_cells
+            combined_table_html += '</tr>'
+
+        combined_table_html += "</table></div>"
 
     download_button = '<form action="/download" method="get"><input type="submit" value="Download Processed XLS" class="button"></form>' if latest_file_stream else ''
     
@@ -302,23 +296,9 @@ def index():
     <html>
     <head>
         <style>
-            .table-container {{
-                display: flex;
-                justify-content: center;
-                gap: 20px;
-                margin: 20px auto;
-                flex-wrap: wrap;
-            }}
             .table-wrapper {{
                 overflow-x: auto;
-            }}
-            .district-table {{
-                flex: 2;
-                min-width: 400px;
-            }}
-            .stats-table-wrapper {{
-                flex: 1;
-                min-width: 250px;
+                margin: 20px auto;
             }}
             .excel-table {{
                 border-collapse: collapse;
@@ -327,49 +307,45 @@ def index():
             }}
             .excel-table th, .excel-table td {{
                 border: 1px solid #000;
-                padding: 8px;
+                padding: 4px;
                 text-align: left;
                 vertical-align: top;
-                min-width: 100px;
+                min-width: 70px;
             }}
             .excel-table .title-row th {{
-                background-color: #2196F3;
+                background-color: #005566; /* Blue from screenshot */
                 color: white;
                 text-align: center;
                 font-weight: bold;
             }}
             .excel-table .header th {{
-                background-color: #4CAF50;
+                background-color: #107C10; /* Green from screenshot */
                 color: white;
             }}
             .excel-table .subheader th {{
-                background-color: #66BB6A;
+                background-color: #5DBB63; /* Light green from screenshot */
                 color: white;
             }}
             .excel-table tr.even {{
-                background-color: #f2f2f2;
+                background-color: #F3F2F1; /* Light gray from screenshot */
             }}
             .excel-table tr.odd {{
-                background-color: #ffffff;
+                background-color: #FFFFFF; /* White from screenshot */
             }}
-            .stats-table th, .stats-table td {{
-                text-align: center;
-                min-width: 120px;
-            }}
-            .stats-table .sub-row td {{
-                font-size: 0.9em;
-                background-color: #e0e0e0;
+            .excel-table .sub-row {{
+                background-color: #E1DFDD; /* Subtle gray from screenshot */
+                font-size: 0.85em;
             }}
             .button {{
-                background-color: #008CBA;
+                background-color: #005566; /* Match title row */
                 color: white;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 border: none;
                 cursor: pointer;
                 margin-top: 10px;
             }}
             .button:hover {{
-                background-color: #006d9e;
+                background-color: #003f4c; /* Darker blue */
             }}
         </style>
     </head>
@@ -382,9 +358,8 @@ def index():
         </form>
         {download_button}
         <h3>Latest Attendance Data</h3>
-        <div class="table-container">
-            {district_table_html}
-            {stats_table_html}
+        <div class="table-wrapper">
+            {combined_table_html}
         </div>
     </body>
     </html>
