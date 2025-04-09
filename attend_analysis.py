@@ -195,7 +195,6 @@ def index():
     
     table_html = ""
     if latest_attendance_data:
-        # Sort districts by numeric order (e.g., 一區 before 二區)
         districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
                           key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
@@ -203,6 +202,13 @@ def index():
         table_html = """
         <div class="table-wrapper">
             <table class="excel-table">
+                <tr class="title-row">
+        """
+        # Add the week display as the top row, spanning all columns
+        total_columns = len(districts) * 2  # Each district has 2 columns
+        table_html += f'<th colspan="{total_columns}">{week_display}</th>'
+        table_html += """
+                </tr>
                 <tr class="header">
         """
         for district in districts:
@@ -251,7 +257,13 @@ def index():
                 vertical-align: top;
                 min-width: 100px;
             }}
-            .excel-table th {{
+            .excel-table .title-row th {{
+                background-color: #2196F3;
+                color: white;
+                text-align: center;
+                font-weight: bold;
+            }}
+            .excel-table .header th {{
                 background-color: #4CAF50;
                 color: white;
             }}
@@ -276,9 +288,6 @@ def index():
             .button:hover {{
                 background-color: #006d9e;
             }}
-            .week-display {{
-                margin-top: 10px;
-            }}
         </style>
     </head>
     <body>
@@ -290,7 +299,6 @@ def index():
         </form>
         {download_button}
         <h3>Latest Attendance Data</h3>
-        <div class="week-display">{week_display}</div>
         {table_html}
     </body>
     </html>
