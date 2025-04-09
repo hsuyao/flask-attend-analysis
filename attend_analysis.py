@@ -53,7 +53,7 @@ def classify_attendance(sheet, week_col):
     not_attended = {}
     district_counts = {}
     youth_above = {'年長', '中壯', '青壯', '青職'}
-    age_categories = ['青職以上', '中學', '大學', '小學', '學齡前']  # No '未知'
+    age_categories = ['青職以上', '中學', '大專', '大學', '小學', '學齡前']
     max_row = sheet.cells.max_row
     
     for row in range(2, max_row + 1):
@@ -218,7 +218,7 @@ def index():
                           key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
         stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
-        age_categories = ['青職以上', '中學', '大學', '小學', '學齡前']
+        age_categories = ['青職以上', '中學', '大專', '大學', '小學', '學齡前']
         
         combined_table_html = """
         <div class="table-wrapper">
