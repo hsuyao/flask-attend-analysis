@@ -314,8 +314,13 @@ def index():
             for district in districts:
                 attended_list = latest_attendance_data['attended'].get(district, [])
                 not_attended_list = latest_attendance_data['not_attended'].get(district, [])
+                # Truncate names longer than 4 Chinese characters
                 attended = attended_list[r] if r < len(attended_list) else ''
                 not_attended = not_attended_list[r] if r < len(not_attended_list) else ''
+                if attended and len(attended) > 4:
+                    attended = attended[:4]
+                if not_attended and len(not_attended) > 4:
+                    not_attended = not_attended[:4]
                 combined_table_html += f'<td>{attended}</td><td>{not_attended}</td>'
             # Separator column
             combined_table_html += '<td class="separator"></td>'
@@ -359,10 +364,11 @@ def index():
             }}
             .excel-table th, .excel-table td {{
                 border: 1px solid #000;
-                padding: 4px;
+                padding: 2px; /* Reduced padding to decrease cell height */
                 text-align: left;
                 vertical-align: top;
                 min-width: 70px;
+                line-height: 1.2; /* Reduced line-height to decrease cell height */
             }}
             .excel-table .separator {{
                 min-width: 10px;
@@ -373,14 +379,20 @@ def index():
                 color: white;
                 text-align: center;
                 font-weight: bold;
+                padding: 2px; /* Reduced padding */
+                line-height: 1.2; /* Reduced line-height */
             }}
             .excel-table .header th {{
                 background-color: #107C10; /* Green from screenshot */
                 color: white;
+                padding: 2px; /* Reduced padding */
+                line-height: 1.2; /* Reduced line-height */
             }}
             .excel-table .subheader th {{
                 background-color: #5DBB63; /* Light green from screenshot */
                 color: white;
+                padding: 2px; /* Reduced padding */
+                line-height: 1.2; /* Reduced line-height */
             }}
             .excel-table tr.even {{
                 background-color: #F3F2F1; /* Light gray from screenshot */
@@ -399,6 +411,8 @@ def index():
                 color: white;
                 text-align: center;
                 font-weight: bold;
+                padding: 2px; /* Reduced padding */
+                line-height: 1.2; /* Reduced line-height */
             }}
             .button {{
                 background-color: #005566; /* Match title row */
