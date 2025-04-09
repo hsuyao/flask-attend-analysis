@@ -20,6 +20,7 @@ latest_analytic_date = None
 latest_attendance_data = None  # {'attended': {}, 'not_attended': {}}
 latest_file_stream = None
 latest_week_display = None
+latest_age_counts = None  # {'age_level': count}
 
 def chinese_to_int(chinese_num):
     """Convert Chinese numerals to Arabic integers."""
@@ -50,11 +51,14 @@ def classify_attendance(sheet, week_col):
     logger.debug(f"Classifying attendance for week column: {week_col}")
     attended = {}
     not_attended = {}
+    age_counts = {'青職以上': 0, '中學': 0, '大學': 0, '小學': 0, '學齡前': 0, '未知': 0}
+    youth_above = {'年長', '中壯', '青壯', '青職'}
     max_row = sheet.cells.max_row
     
     for row in range(2, max_row + 1):
         district = f"{sheet.cells.get(row, 0).value}{sheet.cells.get(row, 1).value}"
         name = sheet.cells.get(row, 3).value
+        age = str(sheet.cells.get(row, 4).value or "未知")  # Assume age in column 4 (E)
         if not name or not district.startswith("二大區"):
             continue
         attendance = sheet.cells.get(row, week_col).value
@@ -62,11 +66,17 @@ def classify_attendance(sheet, week_col):
             if district not in attended:
                 attended[district] = []
             attended[district].append(name)
+            if age in youth_above:
+                age_counts['青職以上'] += 1
+            elif age in age_counts:
+                age_counts[age] += 1
+            else:
+                age_counts['未知'] += 1
         else:
             if district not in not_attended:
                 not_attended[district] = []
             not_attended[district].append(name)
-    return attended, not_attended
+    return attended, not_attended, age_counts
 
 def write_summary(sheet, attended, not_attended):
     logger.debug(f"Writing summary with attended: {attended}, not_attended: {not_attended}")
@@ -92,7 +102,7 @@ def write_summary(sheet, attended, not_attended):
     logger.debug("Summary written successfully")
 
 def process_excel(file_stream, file_extension):
-    global latest_analytic_date, latest_attendance_data, latest_file_stream, latest_week_display
+    global latest_analytic_date, latest_attendance_data, latest_file_stream, latest_week_display, latest_age_counts
     file_stream.seek(0)
     file_content = file_stream.read()
     buffered_stream = BytesIO(file_content)
@@ -140,9 +150,10 @@ def process_excel(file_stream, file_extension):
     latest_attended = None
     latest_not_attended = None
     latest_week = None
+    latest_ages = None
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
-        attended, not_attended = classify_attendance(input_sheet, col)
+        attended, not_attended, age_counts = classify_attendance(input_sheet, col)
 
         if not any(attended.values()):
             logger.info(f"No attendees for {week_name} in {month_prefix}, skipping sheet creation")
@@ -158,6 +169,7 @@ def process_excel(file_stream, file_extension):
             latest_attended = attended
             latest_not_attended = not_attended
             latest_week = f"{month_prefix}{week_name}"
+            latest_ages = age_counts
 
         existing_names = [sheet.name for sheet in workbook.worksheets]
         if new_sheet_name in existing_names:
@@ -178,7 +190,8 @@ def process_excel(file_stream, file_extension):
         latest_analytic_date = latest_date.strftime("%Y年%m月%d日")
         latest_attendance_data = {'attended': latest_attended, 'not_attended': latest_not_attended}
         latest_week_display = latest_week
-        logger.debug(f"Updated latest_analytic_date to: {latest_analytic_date}, latest_week_display to: {latest_week_display}")
+        latest_age_counts = latest_ages
+        logger.debug(f"Updated latest_analytic_date to: {latest_analytic_date}, latest_week_display to: {latest_week_display}, latest_age_counts to: {latest_age_counts}")
 
     output_stream = BytesIO()
     workbook.save(output_stream, ac.SaveFormat.XLSX)
@@ -189,49 +202,68 @@ def process_excel(file_stream, file_extension):
 
 @app.route('/')
 def index():
-    global latest_analytic_date, latest_attendance_data, latest_week_display
+    global latest_analytic_date, latest_attendance_data, latest_week_display, latest_age_counts
     latest_date_display = latest_analytic_date if latest_analytic_date else "No analytics available yet"
     week_display = latest_week_display if latest_week_display else "No week data available yet"
     
-    table_html = ""
+    district_table_html = ""
     if latest_attendance_data:
         districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
                           key=lambda x: chinese_to_int(x[3:4]))
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
         
-        table_html = """
-        <div class="table-wrapper">
+        district_table_html = """
+        <div class="table-wrapper district-table">
             <table class="excel-table">
                 <tr class="title-row">
         """
-        # Add the week display as the top row, spanning all columns
-        total_columns = len(districts) * 2  # Each district has 2 columns
-        table_html += f'<th colspan="{total_columns}">{week_display}</th>'
-        table_html += """
+        total_columns = len(districts) * 2
+        district_table_html += f'<th colspan="{total_columns}">{week_display}</th>'
+        district_table_html += """
                 </tr>
                 <tr class="header">
         """
         for district in districts:
-            table_html += f'<th colspan="2">{district}</th>'
-        table_html += """
+            district_table_html += f'<th colspan="2">{district}</th>'
+        district_table_html += """
                 </tr>
                 <tr class="subheader">
         """
         for _ in districts:
-            table_html += '<th>本週到會</th><th>未到會</th>'
-        table_html += "</tr>"
+            district_table_html += '<th>本週到會</th><th>未到會</th>'
+        district_table_html += "</tr>"
 
         for r in range(max_len):
             row_class = "even" if r % 2 == 0 else "odd"
-            table_html += f'<tr class="{row_class}">'
+            district_table_html += f'<tr class="{row_class}">'
             for district in districts:
                 attended_list = latest_attendance_data['attended'].get(district, [])
                 not_attended_list = latest_attendance_data['not_attended'].get(district, [])
                 attended = attended_list[r] if r < len(attended_list) else ''
                 not_attended = not_attended_list[r] if r < len(not_attended_list) else ''
-                table_html += f'<td>{attended}</td><td>{not_attended}</td>'
-            table_html += '</tr>'
-        table_html += "</table></div>"
+                district_table_html += f'<td>{attended}</td><td>{not_attended}</td>'
+            district_table_html += '</tr>'
+        district_table_html += "</table></div>"
+
+    age_table_html = ""
+    if latest_age_counts:
+        age_table_html = """
+        <div class="table-wrapper age-table-wrapper">
+            <table class="excel-table age-table">
+                <tr class="header">
+                    <th>年齡層</th>
+                    <th>出席人數</th>
+                </tr>
+        """
+        for age, count in latest_age_counts.items():
+            row_class = "even" if list(latest_age_counts.keys()).index(age) % 2 == 0 else "odd"
+            age_table_html += f"""
+                <tr class="{row_class}">
+                    <td>{age}</td>
+                    <td>{count}</td>
+                </tr>
+            """
+        age_table_html += "</table></div>"
 
     download_button = '<form action="/download" method="get"><input type="submit" value="Download Processed XLS" class="button"></form>' if latest_file_stream else ''
     
@@ -240,10 +272,23 @@ def index():
     <html>
     <head>
         <style>
+            .table-container {{
+                display: flex;
+                justify-content: center;
+                gap: 20px;
+                margin: 20px auto;
+                flex-wrap: wrap;
+            }}
             .table-wrapper {{
                 overflow-x: auto;
-                max-width: 100%;
-                margin: 20px auto;
+            }}
+            .district-table {{
+                flex: 2;
+                min-width: 400px;
+            }}
+            .age-table-wrapper {{
+                flex: 1;
+                min-width: 200px;
             }}
             .excel-table {{
                 border-collapse: collapse;
@@ -277,6 +322,10 @@ def index():
             .excel-table tr.odd {{
                 background-color: #ffffff;
             }}
+            .age-table th, .age-table td {{
+                text-align: center;
+                min-width: 120px;
+            }}
             .button {{
                 background-color: #008CBA;
                 color: white;
@@ -299,7 +348,10 @@ def index():
         </form>
         {download_button}
         <h3>Latest Attendance Data</h3>
-        {table_html}
+        <div class="table-container">
+            {district_table_html}
+            {age_table_html}
+        </div>
     </body>
     </html>
     """
