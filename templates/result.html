@@ -11,11 +11,13 @@
         <a href="/download" class="button">下載 Excel</a>
         {% endif %}
     </div>
-    <div class="table-wrapper">
-        {{ attendance_table_html | safe }}
-    </div>
-    <div class="table-wrapper">
-        {{ stats_table_html | safe }}
+    <div class="table-container">
+        <div class="table-wrapper">
+            {{ attendance_table_html | safe }}
+        </div>
+        <div class="table-wrapper">
+            {{ stats_table_html | safe }}
+        </div>
     </div>
 </body>
 </html>

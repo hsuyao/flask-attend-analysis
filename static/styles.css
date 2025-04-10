@@ -1,14 +1,25 @@
 /* static/styles.css */
+.table-container {
+    display: flex; /* 水平排列 */
+    flex-direction: row; /* 確保水平排列 */
+    align-items: flex-start; /* 表格頂部對齊 */
+    justify-content: center; /* 表格置中對齊 */
+    gap: 2em; /* 兩個表格之間的距離為 2 個中文字寬 (約 2em) */
+}
+
 .table-wrapper {
     overflow-x: auto;
-    margin: 20px 0 20px 0; /* 移除 auto，確保靠左 */
-    text-align: left; /* 表格靠左對齊 */
+    margin: 20px 0; /* 移除左右 margin，僅保留上下間距 */
+    text-align: left; /* 表格內部文字靠左，但整體置中 */
+    flex: 1; /* 讓表格根據內容自動調整寬度 */
 }
+
 .excel-table {
     border-collapse: collapse;
     font-family: Arial, sans-serif;
     white-space: nowrap;
 }
+
 .excel-table th, .excel-table td {
     border: 1px solid #000;
     padding: 2px;
@@ -17,10 +28,12 @@
     min-width: 70px;
     line-height: 1.2;
 }
+
 .excel-table .separator {
     min-width: 10px;
     width: 10px;
 }
+
 .excel-table .title-row th {
     background-color: #005566;
     color: white;
@@ -29,30 +42,36 @@
     padding: 2px;
     line-height: 1.2;
 }
+
 .excel-table .header th {
     background-color: #107C10;
     color: white;
     padding: 2px;
     line-height: 1.2;
 }
+
 .excel-table .subheader th {
     background-color: #5DBB63;
     color: white;
     padding: 2px;
     line-height: 1.2;
 }
+
 .excel-table tr.even {
     background-color: #F3F2F1;
     color: black;
 }
+
 .excel-table tr.odd {
     background-color: #FFFFFF;
     color: black;
 }
+
 .excel-table .sub-row {
     background-color: #E1DFDD;
     font-size: 0.85em;
 }
+
 .excel-table .district-header {
     background-color: #107C10;
     color: white;
@@ -61,12 +80,15 @@
     padding: 2px;
     line-height: 1.2;
 }
+
 .excel-table .highlight-green {
     background-color: #90EE90;
 }
+
 .excel-table .highlight-red {
     background-color: #FFB6C1;
 }
+
 .button {
     background-color: #005566;
     color: white;
@@ -77,10 +99,16 @@
     display: inline-block;
     text-decoration: none;
 }
+
 .button:hover {
     background-color: #003f4c;
 }
+
 .button-container {
-    text-align: left; /* 按鈕靠左對齊 */
+    text-align: center; /* 按鈕置中對齊 */
     margin: 10px 0;
+}
+/* static/styles.css */
+h2 {
+    text-align: center; /* 標題置中對齊 */
 }
