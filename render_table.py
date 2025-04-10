@@ -2,23 +2,19 @@
 from config import logger
 from utils import chinese_to_int
 
-def render_combined_table(week_display, latest_attendance_data, latest_district_counts, latest_main_district, all_attendance_data):
-    combined_table_html = ""
-    if not latest_attendance_data or not latest_district_counts:
-        combined_table_html = """
+def render_attendance_table(week_display, latest_attendance_data, all_attendance_data):
+    if not latest_attendance_data:
+        return """
         <div class="table-wrapper">
             <table class="excel-table">
-                <tr class="title-row"><th>No Data Available</th></tr>
+                <tr class="title-row"><th>無出席資料</th></tr>
             </table>
         </div>
         """
-        return combined_table_html
 
     districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
                       key=lambda x: chinese_to_int(x[3:4]))
     max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
-    stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
-    age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     
     previous_week_data = None
     if len(all_attendance_data) > 1:
@@ -62,7 +58,61 @@ def render_combined_table(week_display, latest_attendance_data, latest_district_
         sorted_not_attended[district] = not_attended_with_highlights
         max_len = max(max_len, max(len(attended_with_highlights), len(not_attended_with_highlights)))
 
-    combined_table_html = """
+    attendance_table_html = """
+    <div class="table-wrapper">
+        <table class="excel-table">
+    """
+
+    total_attendance_cols = len(districts) * 2
+
+    attendance_table_html += f'<tr class="title-row">'
+    attendance_table_html += f'<th colspan="{total_attendance_cols}">{week_display}</th>'
+    attendance_table_html += '</tr>'
+
+    attendance_table_html += '<tr class="header">'
+    for district in districts:
+        attendance_table_html += f'<th colspan="2">{district}</th>'
+    attendance_table_html += '</tr>'
+
+    attendance_table_html += '<tr class="subheader">'
+    for _ in districts:
+        attendance_table_html += '<th>本週到會</th><th>未到會</th>'
+    attendance_table_html += '</tr>'
+
+    for r in range(max_len):
+        row_class = "even" if r % 2 == 0 else "odd"
+        attendance_table_html += f'<tr class="{row_class}">'
+        for district in districts:
+            attended_with_highlights = sorted_attended.get(district, [])
+            not_attended_with_highlights = sorted_not_attended.get(district, [])
+            attended_info = attended_with_highlights[r] if r < len(attended_with_highlights) else ('', '', '')
+            not_attended_info = not_attended_with_highlights[r] if r < len(not_attended_with_highlights) else ('', '', '')
+            attended_display = attended_info[1]
+            not_attended_display = not_attended_info[1]
+            attended_class = attended_info[2]
+            not_attended_class = not_attended_info[2]
+
+            attendance_table_html += f'<td class="{attended_class}">{attended_display}</td><td class="{not_attended_class}">{not_attended_display}</td>'
+        attendance_table_html += '</tr>'
+
+    attendance_table_html += "</table></div>"
+
+    return attendance_table_html
+
+def render_stats_table(latest_district_counts, latest_main_district):
+    if not latest_district_counts:
+        return """
+        <div class="table-wrapper">
+            <table class="excel-table">
+                <tr class="title-row"><th>無統計資料</th></tr>
+            </table>
+        </div>
+        """
+
+    stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
+    age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+
+    stats_table_html = """
     <div class="table-wrapper">
         <table class="excel-table">
     """
@@ -97,76 +147,9 @@ def render_combined_table(week_display, latest_attendance_data, latest_district_
     row_class = "even" if row_index % 2 == 0 else "odd"
     stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">總計</td><td class="sub-row">{total_attendance}</td>'))
 
-    stats_index = 0
-    total_attendance_cols = len(districts) * 2
+    for row_class, stats_cells in stats_rows:
+        stats_table_html += f'<tr class="{row_class}">{stats_cells}</tr>'
 
-    combined_table_html += f'<tr class="title-row">'
-    combined_table_html += f'<th colspan="{total_attendance_cols + 1}">{week_display}</th>'
-    if stats_index < len(stats_rows):
-        row_class, stats_cells = stats_rows[stats_index]
-        combined_table_html += stats_cells
-        stats_index += 1
-    else:
-        combined_table_html += '<td></td><td></td>'
-    combined_table_html += '</tr>'
+    stats_table_html += "</table></div>"
 
-    combined_table_html += '<tr class="header">'
-    for district in districts:
-        combined_table_html += f'<th colspan="2">{district}</th>'
-    combined_table_html += '<th class="separator"></th>'
-    if stats_index < len(stats_rows):
-        row_class, stats_cells = stats_rows[stats_index]
-        combined_table_html += stats_cells
-        stats_index += 1
-    else:
-        combined_table_html += '<td></td><td></td>'
-    combined_table_html += '</tr>'
-
-    combined_table_html += '<tr class="subheader">'
-    for _ in districts:
-        combined_table_html += '<th>本週到會</th><th>未到會</th>'
-    combined_table_html += '<th class="separator"></th>'
-    if stats_index < len(stats_rows):
-        row_class, stats_cells = stats_rows[stats_index]
-        combined_table_html += stats_cells
-        stats_index += 1
-    else:
-        combined_table_html += '<td></td><td></td>'
-    combined_table_html += '</tr>'
-
-    for r in range(max_len):
-        row_class = "even" if r % 2 == 0 else "odd"
-        combined_table_html += f'<tr class="{row_class}">'
-        for district in districts:
-            attended_with_highlights = sorted_attended.get(district, [])
-            not_attended_with_highlights = sorted_not_attended.get(district, [])
-            attended_info = attended_with_highlights[r] if r < len(attended_with_highlights) else ('', '', '')
-            not_attended_info = not_attended_with_highlights[r] if r < len(not_attended_with_highlights) else ('', '', '')
-            attended_display = attended_info[1]
-            not_attended_display = not_attended_info[1]
-            attended_class = attended_info[2]
-            not_attended_class = not_attended_info[2]
-
-            combined_table_html += f'<td class="{attended_class}">{attended_display}</td><td class="{not_attended_class}">{not_attended_display}</td>'
-        combined_table_html += '<td class="separator"></td>'
-        if stats_index < len(stats_rows):
-            row_class, stats_cells = stats_rows[stats_index]
-            combined_table_html += stats_cells
-            stats_index += 1
-        else:
-            combined_table_html += '<td></td><td></td>'
-        combined_table_html += '</tr>'
-
-    while stats_index < len(stats_rows):
-        row_class, stats_cells = stats_rows[stats_index]
-        combined_table_html += f'<tr class="{row_class}">'
-        for _ in districts:
-            combined_table_html += '<td></td><td></td>'
-        combined_table_html += '<td class="separator"></td>'
-        combined_table_html += stats_cells
-        stats_index += 1
-        combined_table_html += '</tr>'
-
-    combined_table_html += "</table></div>"
-
-    return combined_table_html
+    return stats_table_html

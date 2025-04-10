@@ -7,7 +7,7 @@ import os
 import traceback
 from config import logger
 from excel_handler import process_excel
-from render_table import render_combined_table
+from render_table import render_attendance_table, render_stats_table
 
 app = Flask(__name__)
 
@@ -70,17 +70,20 @@ def result():
     latest_main_district = session.get('latest_main_district')
     all_attendance_data = session.get('all_attendance_data', [])
     
-    combined_table_html = render_combined_table(
+    attendance_table_html = render_attendance_table(
         latest_week_display,
         latest_attendance_data,
-        latest_district_counts,
-        latest_main_district,
         all_attendance_data
+    )
+    stats_table_html = render_stats_table(
+        latest_district_counts,
+        latest_main_district
     )
     
     return render_template(
         'result.html',
-        combined_table_html=combined_table_html,
+        attendance_table_html=attendance_table_html,
+        stats_table_html=stats_table_html,
         has_file_stream='latest_file_stream' in session
     )
 

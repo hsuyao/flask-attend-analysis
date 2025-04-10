@@ -1,7 +1,8 @@
 /* static/styles.css */
 .table-wrapper {
     overflow-x: auto;
-    margin: 20px auto;
+    margin: 20px 0 20px 0; /* 移除 auto，確保靠左 */
+    text-align: left; /* 表格靠左對齊 */
 }
 .excel-table {
     border-collapse: collapse;
@@ -80,6 +81,6 @@
     background-color: #003f4c;
 }
 .button-container {
-    text-align: center;
+    text-align: left; /* 按鈕靠左對齊 */
     margin: 10px 0;
 }
