@@ -1,6 +1,7 @@
 # app.py
-from flask import Flask, request, jsonify, send_file, redirect, url_for, session
+from flask import Flask, request, jsonify, send_file, redirect, url_for, session, render_template
 from flask_session import Session
+from io import BytesIO
 import uuid
 import os
 import traceback
@@ -15,113 +16,9 @@ app.config['SESSION_TYPE'] = 'filesystem'  # Store session data on the filesyste
 app.config['SECRET_KEY'] = 'your-secret-key-here'  # Replace with a secure key
 Session(app)
 
-# CSS styles for both pages
-CSS_STYLES = """
-<style>
-    .table-wrapper {
-        overflow-x: auto;
-        margin: 20px auto;
-    }
-    .excel-table {
-        border-collapse: collapse;
-        font-family: Arial, sans-serif;
-        white-space: nowrap;
-    }
-    .excel-table th, .excel-table td {
-        border: 1px solid #000;
-        padding: 2px;
-        text-align: left;
-        vertical-align: top;
-        min-width: 70px;
-        line-height: 1.2;
-    }
-    .excel-table .separator {
-        min-width: 10px;
-        width: 10px;
-    }
-    .excel-table .title-row th {
-        background-color: #005566;
-        color: white;
-        text-align: center;
-        font-weight: bold;
-        padding: 2px;
-        line-height: 1.2;
-    }
-    .excel-table .header th {
-        background-color: #107C10;
-        color: white;
-        padding: 2px;
-        line-height: 1.2;
-    }
-    .excel-table .subheader th {
-        background-color: #5DBB63;
-        color: white;
-        padding: 2px;
-        line-height: 1.2;
-    }
-    .excel-table tr.even {
-        background-color: #F3F2F1;
-        color: black;
-    }
-    .excel-table tr.odd {
-        background-color: #FFFFFF;
-        color: black;
-    }
-    .excel-table .sub-row {
-        background-color: #E1DFDD;
-        font-size: 0.85em;
-    }
-    .excel-table .district-header {
-        background-color: #107C10;
-        color: white;
-        text-align: center;
-        font-weight: bold;
-        padding: 2px;
-        line-height: 1.2;
-    }
-    .excel-table .highlight-green {
-        background-color: #90EE90;
-    }
-    .excel-table .highlight-red {
-        background-color: #FFB6C1;
-    }
-    .button {
-        background-color: #005566;
-        color: white;
-        padding: 8px 16px;
-        border: none;
-        cursor: pointer;
-        margin: 10px 5px;
-        display: inline-block;
-        text-decoration: none;
-    }
-    .button:hover {
-        background-color: #003f4c;
-    }
-    .button-container {
-        text-align: center;
-        margin-top: 10px;
-    }
-</style>
-"""
-
 @app.route('/')
 def index():
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        {CSS_STYLES}
-    </head>
-    <body>
-        <h2>Upload Excel File for Analysis</h2>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" accept=".xls,.xlsx">
-            <input type="submit" value="Upload and Analyze" class="button">
-        </form>
-    </body>
-    </html>
-    """
+    return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -180,25 +77,12 @@ def result():
         latest_main_district,
         all_attendance_data
     )
-    download_button = '<a href="/download" class="button">Download Excel</a>' if 'latest_file_stream' in session else ''
     
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        {CSS_STYLES}
-    </head>
-    <body>
-        <div class="table-wrapper">
-            {combined_table_html}
-        </div>
-        <div class="button-container">
-            <a href="/" class="button">Back to Upload Page</a>
-            {download_button}
-        </div>
-    </body>
-    </html>
-    """
+    return render_template(
+        'result.html',
+        combined_table_html=combined_table_html,
+        has_file_stream='latest_file_stream' in session
+    )
 
 @app.route('/download', methods=['GET'])
 def download_file():

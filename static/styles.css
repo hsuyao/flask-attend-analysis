@@ -1,0 +1,85 @@
+/* static/styles.css */
+.table-wrapper {
+    overflow-x: auto;
+    margin: 20px auto;
+}
+.excel-table {
+    border-collapse: collapse;
+    font-family: Arial, sans-serif;
+    white-space: nowrap;
+}
+.excel-table th, .excel-table td {
+    border: 1px solid #000;
+    padding: 2px;
+    text-align: left;
+    vertical-align: top;
+    min-width: 70px;
+    line-height: 1.2;
+}
+.excel-table .separator {
+    min-width: 10px;
+    width: 10px;
+}
+.excel-table .title-row th {
+    background-color: #005566;
+    color: white;
+    text-align: center;
+    font-weight: bold;
+    padding: 2px;
+    line-height: 1.2;
+}
+.excel-table .header th {
+    background-color: #107C10;
+    color: white;
+    padding: 2px;
+    line-height: 1.2;
+}
+.excel-table .subheader th {
+    background-color: #5DBB63;
+    color: white;
+    padding: 2px;
+    line-height: 1.2;
+}
+.excel-table tr.even {
+    background-color: #F3F2F1;
+    color: black;
+}
+.excel-table tr.odd {
+    background-color: #FFFFFF;
+    color: black;
+}
+.excel-table .sub-row {
+    background-color: #E1DFDD;
+    font-size: 0.85em;
+}
+.excel-table .district-header {
+    background-color: #107C10;
+    color: white;
+    text-align: center;
+    font-weight: bold;
+    padding: 2px;
+    line-height: 1.2;
+}
+.excel-table .highlight-green {
+    background-color: #90EE90;
+}
+.excel-table .highlight-red {
+    background-color: #FFB6C1;
+}
+.button {
+    background-color: #005566;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    cursor: pointer;
+    margin: 10px 5px;
+    display: inline-block;
+    text-decoration: none;
+}
+.button:hover {
+    background-color: #003f4c;
+}
+.button-container {
+    text-align: center;
+    margin: 10px 0;
+}

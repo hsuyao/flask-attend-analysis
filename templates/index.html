@@ -1,0 +1,14 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h2>上傳 Excel 檔案進行分析</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".xls,.xlsx">
+        <input type="submit" value="上傳並分析" class="button">
+    </form>
+</body>
+</html>
