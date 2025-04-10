@@ -246,6 +246,48 @@ def index():
                     previous_week_data = data
                     break
 
+        # Prepare sorted lists with highlights
+        sorted_attended = {}
+        sorted_not_attended = {}
+        for district in districts:
+            attended_list = latest_attendance_data['attended'].get(district, [])
+            not_attended_list = latest_attendance_data['not_attended'].get(district, [])
+            
+            # Compute highlights for sorting
+            attended_with_highlights = []
+            not_attended_with_highlights = []
+            if previous_week_data:
+                prev_attended = previous_week_data['attended'].get(district, [])
+                prev_not_attended = previous_week_data['not_attended'].get(district, [])
+                
+                for name in attended_list:
+                    # Truncate names longer than 4 Chinese characters
+                    display_name = name[:4] if len(name) > 4 else name
+                    # Determine highlight
+                    highlight = 'highlight-green' if name in prev_not_attended else ''
+                    attended_with_highlights.append((name, display_name, highlight))
+                
+                for name in not_attended_list:
+                    # Truncate names longer than 4 Chinese characters
+                    display_name = name[:4] if len(name) > 4 else name
+                    # Determine highlight
+                    highlight = 'highlight-red' if name in prev_attended else ''
+                    not_attended_with_highlights.append((name, display_name, highlight))
+            
+            else:
+                # No previous week data, no highlights
+                attended_with_highlights = [(name, name[:4] if len(name) > 4 else name, '') for name in attended_list]
+                not_attended_with_highlights = [(name, name[:4] if len(name) > 4 else name, '') for name in not_attended_list]
+            
+            # Sort: highlighted names (green or red) come first, others keep original order
+            attended_with_highlights.sort(key=lambda x: (x[2] == '', x[0]))  # Highlighted first, then by original name
+            not_attended_with_highlights.sort(key=lambda x: (x[2] == '', x[0]))  # Highlighted first, then by original name
+            
+            sorted_attended[district] = attended_with_highlights
+            sorted_not_attended[district] = not_attended_with_highlights
+            # Update max_len after sorting
+            max_len = max(max_len, max(len(attended_with_highlights), len(not_attended_with_highlights)))
+
         combined_table_html = """
         <div class="table-wrapper">
             <table class="excel-table">
@@ -330,30 +372,17 @@ def index():
             combined_table_html += f'<tr class="{row_class}">'
             # Attendance columns
             for district in districts:
-                attended_list = latest_attendance_data['attended'].get(district, [])
-                not_attended_list = latest_attendance_data['not_attended'].get(district, [])
-                # Truncate names longer than 4 Chinese characters
-                attended = attended_list[r] if r < len(attended_list) else ''
-                not_attended = not_attended_list[r] if r < len(not_attended_list) else ''
-                if attended and len(attended) > 4:
-                    attended = attended[:4]
-                if not_attended and len(not_attended) > 4:
-                    not_attended = not_attended[:4]
+                attended_with_highlights = sorted_attended.get(district, [])
+                not_attended_with_highlights = sorted_not_attended.get(district, [])
+                # Get name and highlight class
+                attended_info = attended_with_highlights[r] if r < len(attended_with_highlights) else ('', '', '')
+                not_attended_info = not_attended_with_highlights[r] if r < len(not_attended_with_highlights) else ('', '', '')
+                attended_display = attended_info[1]
+                not_attended_display = not_attended_info[1]
+                attended_class = attended_info[2]
+                not_attended_class = not_attended_info[2]
 
-                # Compare with previous week
-                attended_class = ''
-                not_attended_class = ''
-                if previous_week_data:
-                    prev_attended = previous_week_data['attended'].get(district, [])
-                    prev_not_attended = previous_week_data['not_attended'].get(district, [])
-                    # If this week attended but last week not attended -> highlight green
-                    if attended and attended in prev_not_attended:
-                        attended_class = 'highlight-green'
-                    # If this week not attended but last week attended -> highlight red
-                    if not_attended and not_attended in prev_attended:
-                        not_attended_class = 'highlight-red'
-
-                combined_table_html += f'<td class="{attended_class}">{attended}</td><td class="{not_attended_class}">{not_attended}</td>'
+                combined_table_html += f'<td class="{attended_class}">{attended_display}</td><td class="{not_attended_class}">{not_attended_display}</td>'
             # Separator column
             combined_table_html += '<td class="separator"></td>'
             # Stats columns
