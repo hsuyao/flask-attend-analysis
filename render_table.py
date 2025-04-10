@@ -1,11 +1,10 @@
 # render_table.py
-from config import logger, state
+from config import logger
 from utils import chinese_to_int
 
-def render_combined_table(week_display):
+def render_combined_table(week_display, latest_attendance_data, latest_district_counts, latest_main_district, all_attendance_data):
     combined_table_html = ""
-    if not state.latest_attendance_data or not state.latest_district_counts:
-        # Display a default table or message when no data is available
+    if not latest_attendance_data or not latest_district_counts:
         combined_table_html = """
         <div class="table-wrapper">
             <table class="excel-table">
@@ -15,17 +14,17 @@ def render_combined_table(week_display):
         """
         return combined_table_html
 
-    districts = sorted(set(state.latest_attendance_data['attended'].keys()).union(state.latest_attendance_data['not_attended'].keys()), 
+    districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
                       key=lambda x: chinese_to_int(x[3:4]))
-    max_len = max(max(len(state.latest_attendance_data['attended'].get(d, [])), len(state.latest_attendance_data['not_attended'].get(d, []))) for d in districts)
-    stats_districts = sorted([d for d in state.latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
+    max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
+    stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=lambda x: chinese_to_int(x[3:4]))
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     
     previous_week_data = None
-    if len(state.all_attendance_data) > 1:
-        state.all_attendance_data.sort(key=lambda x: x[0])
-        latest_date = state.all_attendance_data[-1][0]
-        for date, data, week_name in reversed(state.all_attendance_data[:-1]):
+    if len(all_attendance_data) > 1:
+        all_attendance_data.sort(key=lambda x: x[0])
+        latest_date = all_attendance_data[-1][0]
+        for date, data, week_name in reversed(all_attendance_data[:-1]):
             if date < latest_date:
                 previous_week_data = data
                 break
@@ -33,8 +32,8 @@ def render_combined_table(week_display):
     sorted_attended = {}
     sorted_not_attended = {}
     for district in districts:
-        attended_list = state.latest_attendance_data['attended'].get(district, [])
-        not_attended_list = state.latest_attendance_data['not_attended'].get(district, [])
+        attended_list = latest_attendance_data['attended'].get(district, [])
+        not_attended_list = latest_attendance_data['not_attended'].get(district, [])
         
         attended_with_highlights = []
         not_attended_with_highlights = []
@@ -75,18 +74,18 @@ def render_combined_table(week_display):
         stats_rows.append((row_class, f'<td colspan="2" class="district-header">{district}</td>'))
         row_index += 1
         for age in age_categories:
-            count = state.latest_district_counts[district]['ages'][age]
+            count = latest_district_counts[district]['ages'][age]
             row_class = "even" if row_index % 2 == 0 else "odd"
             stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">{age}</td><td class="sub-row">{count}</td>'))
             row_index += 1
-        total = state.latest_district_counts[district]['total']
+        total = latest_district_counts[district]['total']
         row_class = "even" if row_index % 2 == 0 else "odd"
         stats_rows.append((row_class, f'<td class="sub-row" style="padding-left: 15px;">總計</td><td class="sub-row">{total}</td>'))
         row_index += 1
 
-    main_district = state.latest_main_district if state.latest_main_district else "未知大區"
-    overall_ages = {age: sum(state.latest_district_counts[d]['ages'][age] for d in stats_districts) for age in age_categories}
-    total_attendance = state.latest_district_counts['總計']
+    main_district = latest_main_district if latest_main_district else "未知大區"
+    overall_ages = {age: sum(latest_district_counts[d]['ages'][age] for d in stats_districts) for age in age_categories}
+    total_attendance = latest_district_counts['總計']
     row_class = "even" if row_index % 2 == 0 else "odd"
     stats_rows.append((row_class, f'<td colspan="2" class="district-header">{main_district}</td>'))
     row_index += 1

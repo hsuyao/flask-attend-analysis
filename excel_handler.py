@@ -6,7 +6,7 @@ from io import BytesIO
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
-from config import logger, START_COLUMN, state
+from config import logger, START_COLUMN
 from utils import chinese_to_int
 
 def convert_xls_to_xlsx(file_stream):
@@ -54,6 +54,7 @@ def convert_xls_to_xlsx(file_stream):
             os.remove(temp_xlsx_path)
 
 def classify_attendance(sheet, week_col):
+    main_district = None
     logger.debug(f"Classifying attendance for week column: {week_col}")
     attended = {}
     not_attended = {}
@@ -63,16 +64,16 @@ def classify_attendance(sheet, week_col):
     max_row = sheet.max_row
     
     for row in range(3, max_row + 1):
-        main_district = str(sheet.cell(row, 1).value or "").strip()
+        main_district_value = str(sheet.cell(row, 1).value or "").strip()
         sub_district = str(sheet.cell(row, 2).value or "").strip()
-        district = f"{main_district}{sub_district}"
+        district = f"{main_district_value}{sub_district}"
         name = sheet.cell(row, 4).value
         age = str(sheet.cell(row, 6).value or "").strip()
-        if not name or not district.startswith(main_district):
+        if not name or not district.startswith(main_district_value):
             continue
-        if state.latest_main_district is None and main_district:
-            state.latest_main_district = main_district
-            logger.debug(f"Set main district name to: {state.latest_main_district}")
+        if main_district is None and main_district_value:
+            main_district = main_district_value
+            logger.debug(f"Set main district name to: {main_district}")
         attendance = sheet.cell(row, week_col + 1).value
         if attendance == 1:
             if district not in attended:
@@ -92,7 +93,7 @@ def classify_attendance(sheet, week_col):
             not_attended[district].append(name)
     total_attendance = sum(d['total'] for d in district_counts.values())
     district_counts['總計'] = total_attendance
-    return attended, not_attended, district_counts
+    return attended, not_attended, district_counts, main_district
 
 def write_summary(new_sheet, attended, not_attended):
     logger.debug(f"Writing summary with attended: {attended}, not_attended: {not_attended}")
@@ -172,15 +173,18 @@ def process_excel(file_stream, file_extension):
     if not week_cols:
         logger.warning("No week columns detected; output will lack analytic sheets")
 
-    state.all_attendance_data.clear()
+    all_attendance_data = []
     latest_date = None
     latest_attended = None
     latest_not_attended = None
     latest_week = None
     latest_districts = None
+    latest_main_district = None
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
-        attended, not_attended, district_counts = classify_attendance(input_sheet, col)
+        attended, not_attended, district_counts, main_district = classify_attendance(input_sheet, col)
+        if main_district and not latest_main_district:
+            latest_main_district = main_district
 
         if not any(attended.values()):
             logger.info(f"No attendees for {week_name} in {month_prefix}, skipping sheet creation")
@@ -192,7 +196,7 @@ def process_excel(file_stream, file_extension):
         month_num = int(month_prefix.split("年")[1].replace("月", ""))
         current_date = datetime(2025, month_num, min(week_num * 7, 28))
         
-        state.all_attendance_data.append((current_date, {'attended': attended, 'not_attended': not_attended}, f"{month_prefix}{week_name}"))
+        all_attendance_data.append((current_date, {'attended': attended, 'not_attended': not_attended}, f"{month_prefix}{week_name}"))
 
         if latest_date is None or current_date > latest_date:
             latest_date = current_date
@@ -209,16 +213,18 @@ def process_excel(file_stream, file_extension):
         logger.debug(f"Created new sheet: {new_sheet_name}")
         write_summary(new_sheet, attended, not_attended)
 
-    if latest_date:
-        state.latest_analytic_date = latest_date.strftime("%Y年%m月%d日")
-        state.latest_attendance_data = {'attended': latest_attended, 'not_attended': latest_not_attended}
-        state.latest_week_display = latest_week
-        state.latest_district_counts = latest_districts
-        logger.debug(f"Updated latest_analytic_date to: {state.latest_analytic_date}, latest_week_display to: {state.latest_week_display}, latest_district_counts to: {state.latest_district_counts}")
-
     output_stream = BytesIO()
     workbook.save(output_stream)
     output_stream.seek(0)
-    state.latest_file_stream = BytesIO(output_stream.read())
     logger.info("File processing completed successfully")
-    return output_stream
+
+    # Return all necessary data for session storage
+    return {
+        'output_stream': output_stream,
+        'latest_analytic_date': latest_date.strftime("%Y年%m月%d日") if latest_date else None,
+        'latest_attendance_data': {'attended': latest_attended, 'not_attended': latest_not_attended} if latest_attended else None,
+        'latest_week_display': latest_week,
+        'latest_district_counts': latest_districts,
+        'latest_main_district': latest_main_district,
+        'all_attendance_data': all_attendance_data
+    }
