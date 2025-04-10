@@ -91,18 +91,22 @@ CSS_STYLES = """
         padding: 8px 16px;
         border: none;
         cursor: pointer;
-        margin-top: 10px;
+        margin: 10px 5px;
+        display: inline-block;
+        text-decoration: none;
     }
     .button:hover {
         background-color: #003f4c;
+    }
+    .button-container {
+        text-align: center;
+        margin-top: 10px;
     }
 </style>
 """
 
 @app.route('/')
 def index():
-    # Clear session data for new users (optional, depending on your needs)
-    # session.clear()
     return f"""
     <!DOCTYPE html>
     <html>
@@ -163,7 +167,6 @@ def upload_file():
 @app.route('/result')
 def result():
     # Retrieve data from session
-    latest_analytic_date = session.get('latest_analytic_date', "No analytics available yet")
     latest_attendance_data = session.get('latest_attendance_data')
     latest_week_display = session.get('latest_week_display', "No week data available yet")
     latest_district_counts = session.get('latest_district_counts')
@@ -177,7 +180,7 @@ def result():
         latest_main_district,
         all_attendance_data
     )
-    download_button = '<form action="/download" method="get"><input type="submit" value="Download Processed XLS" class="button"></form>' if 'latest_file_stream' in session else ''
+    download_button = '<a href="/download" class="button">Download Excel</a>' if 'latest_file_stream' in session else ''
     
     return f"""
     <!DOCTYPE html>
@@ -186,14 +189,13 @@ def result():
         {CSS_STYLES}
     </head>
     <body>
-        <h2>Analysis Results</h2>
-        <p>Latest Analytic Date: {latest_analytic_date}</p>
-        {download_button}
-        <h3>Latest Attendance Data</h3>
         <div class="table-wrapper">
             {combined_table_html}
         </div>
-        <a href="/" class="button">Back to Upload Page</a>
+        <div class="button-container">
+            <a href="/" class="button">Back to Upload Page</a>
+            {download_button}
+        </div>
     </body>
     </html>
     """
