@@ -18,12 +18,7 @@
         </select>
     </div>
     <div class="table-container">
-        <div class="table-wrapper" id="attendance-table-wrapper">
-            {{ attendance_table_html | safe }}
-        </div>
-        <div class="table-wrapper" id="stats-table-wrapper">
-            {{ stats_table_html | safe }}
-        </div>
+        {{ attendance_table_html | safe }}
     </div>
 
     <script>
@@ -34,8 +29,8 @@
                 fetch(`/get_week_data/${selectedWeekIdx}`)
                     .then(response => response.json())
                     .then(data => {
-                        document.getElementById('attendance-table-wrapper').innerHTML = data.attendance_table;
-                        document.getElementById('stats-table-wrapper').innerHTML = data.stats_table;
+                        const container = document.querySelector('.table-container');
+                        container.innerHTML = data.attendance_table;
                     })
                     .catch(error => {
                         console.error('Error fetching week data:', error);
@@ -43,5 +38,5 @@
             });
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'92e79feead4eb097',t:'MTc0NDM0NDUyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>

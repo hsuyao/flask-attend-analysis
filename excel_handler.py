@@ -58,7 +58,7 @@ def classify_attendance(sheet, week_col):
     attended = {}
     not_attended = {}
     district_counts = {}
-    main_district_counts = {}  # 新增：按大區统计
+    main_district_counts = {}
     youth_above = {'年長', '中壯', '青壯', '青職'}
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     max_row = sheet.max_row
@@ -97,7 +97,7 @@ def classify_attendance(sheet, week_col):
             not_attended[district].append(name)
     total_attendance = sum(d['total'] for d in district_counts.values())
     district_counts['總計'] = total_attendance
-    return attended, not_attended, district_counts, main_district, main_district_counts  # 新增返回值
+    return attended, not_attended, district_counts, main_district, main_district_counts
 
 def write_summary(new_sheet, attended, not_attended):
     logger.debug(f"Writing summary with attended: {attended}, not_attended: {not_attended}")
@@ -167,7 +167,7 @@ def process_excel(file_stream, file_extension):
     for col in range(START_COLUMN, input_sheet.max_column + 1):
         month_header = str(input_sheet.cell(1, col + 1).value or "")
         week_header = str(input_sheet.cell(2, col + 1).value or "")
-        if "2025年" in month_header:
+        if "年" in month_header and "月" in month_header:
             current_month = month_header.strip()
         if "週" in week_header:
             week_cols.append((col, week_header, current_month))
@@ -184,7 +184,7 @@ def process_excel(file_stream, file_extension):
     latest_week = None
     latest_districts = None
     latest_main_district = None
-    latest_main_district_counts = None  # 新增
+    latest_main_district_counts = None
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
         attended, not_attended, district_counts, main_district, main_district_counts = classify_attendance(input_sheet, col)
@@ -192,15 +192,18 @@ def process_excel(file_stream, file_extension):
             latest_main_district = main_district
 
         if not any(attended.values()):
-            logger.info(f"No attendees for {week_name} in {month_prefix}, skipping sheet creation")
-            continue
+            logger.info(f"No attendees for {week_name} in {month_prefix}, skipping sheet creation and data inclusion")
+            continue  # 跳過無人出席的週，不加入 all_attendance_data
 
-        new_sheet_name = f"{month_prefix}{week_name} 主日"
+        # 提取年份並生成唯一的工作表名稱
+        year = int(month_prefix.split("年")[0])
+        month_part = month_prefix.split("年")[1]
         week_str = week_name.replace("第", "").replace("週", "")
         week_num = chinese_to_int(week_str)
-        month_num = int(month_prefix.split("年")[1].replace("月", ""))
-        current_date = datetime(2025, month_num, min(week_num * 7, 28))
-        
+        month_num = int(month_part.replace("月", ""))
+        current_date = datetime(year, month_num, min(week_num * 7, 28))
+        new_sheet_name = f"{year}年{month_part}{week_name} 主日"
+
         all_attendance_data.append((current_date, {'attended': attended, 'not_attended': not_attended}, f"{month_prefix}{week_name}"))
 
         if latest_date is None or current_date > latest_date:
@@ -209,7 +212,7 @@ def process_excel(file_stream, file_extension):
             latest_not_attended = not_attended
             latest_week = f"{month_prefix}{week_name}"
             latest_districts = district_counts
-            latest_main_district_counts = main_district_counts  # 新增
+            latest_main_district_counts = main_district_counts
 
         if new_sheet_name in workbook.sheetnames:
             logger.error(f"Duplicate sheet name detected: {new_sheet_name}")
@@ -218,6 +221,19 @@ def process_excel(file_stream, file_extension):
         new_sheet = workbook.create_sheet(new_sheet_name)
         logger.debug(f"Created new sheet: {new_sheet_name}")
         write_summary(new_sheet, attended, not_attended)
+
+    if not all_attendance_data:
+        logger.warning("No weeks with attendees found in the file")
+        return {
+            'output_stream': BytesIO(),  # 返回空的輸出流
+            'latest_analytic_date': None,
+            'latest_attendance_data': None,
+            'latest_week_display': None,
+            'latest_district_counts': None,
+            'latest_main_district': None,
+            'latest_main_district_counts': None,
+            'all_attendance_data': []
+        }
 
     output_stream = BytesIO()
     workbook.save(output_stream)
@@ -231,6 +247,6 @@ def process_excel(file_stream, file_extension):
         'latest_week_display': latest_week,
         'latest_district_counts': latest_districts,
         'latest_main_district': latest_main_district,
-        'latest_main_district_counts': latest_main_district_counts,  # 新增
+        'latest_main_district_counts': latest_main_district_counts,
         'all_attendance_data': all_attendance_data
     }

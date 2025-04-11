@@ -1,17 +1,41 @@
 /* static/styles.css */
 .table-container {
-    display: flex; /* 水平排列 */
-    flex-direction: row; /* 確保水平排列 */
-    align-items: flex-start; /* 表格頂部對齊 */
-    justify-content: center; /* 表格置中對齊 */
-    gap: 5px; /* 表格間距 */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.district-section {
+    width: 100%;
+    max-width: 1200px;
+    margin-bottom: 20px;
+}
+
+.district-container {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    justify-content: center;
 }
 
 .table-wrapper {
-    overflow-x: auto; /* 水平滾動條 */
-    margin: 20px 0; /* 移除左右 margin，僅保留上下間距 */
-    text-align: left; /* 表格內部文字靠左 */
-    min-width: 200px; /* 確保表格有最小寬度 */
+    margin: 0;
+    text-align: left;
+    min-width: 200px;
+}
+
+.attendance-wrapper {
+    max-height: 70vh;
+    overflow-y: auto;
+    overflow-x: auto;
+    min-width: 300px;
+}
+
+.stats-wrapper {
+    max-height: 70vh; /* 與名單表高度一致 */
+    overflow-y: auto; /* 添加垂直滾動 */
+    min-width: 200px;
 }
 
 .excel-table {
@@ -29,13 +53,8 @@
     line-height: 1.2;
 }
 
-.excel-table .separator {
-    min-width: 10px;
-    width: 10px;
-}
-
 .excel-table .title-row th {
-    background-color: #1C2526; /* 改為更深的暗青色（比 #2F4F4F 更深） */
+    background-color: #1C2526;
     color: white;
     text-align: center;
     font-weight: bold;
@@ -44,14 +63,22 @@
 }
 
 .excel-table .header th {
-    background-color: #2F4F4F; /* 改為暗青色（比 #4682B4 更深） */
+    background-color: #2F4F4F;
     color: white;
     padding: 2px;
     line-height: 1.2;
 }
 
+.excel-table .district-row th {
+    background-color: #4682B4;
+    color: white;
+    text-align: center;
+    padding: 2px;
+    line-height: 1.2;
+}
+
 .excel-table .subheader th {
-    background-color: #5F9EA0; /* 改為較深的青色（CadetBlue，比 #B0C4DE 更深） */
+    background-color: #5F9EA0;
     color: white;
     padding: 2px;
     line-height: 1.2;
@@ -67,20 +94,6 @@
     color: black;
 }
 
-.excel-table .sub-row {
-    background-color: #E1DFDD;
-    font-size: 0.85em;
-}
-
-.excel-table .district-header {
-    background-color: #2F4F4F; /* 與 header 一致，使用暗青色 */
-    color: white;
-    text-align: center;
-    font-weight: bold;
-    padding: 2px;
-    line-height: 1.2;
-}
-
 .excel-table .highlight-green {
     background-color: #90EE90;
 }
@@ -90,7 +103,7 @@
 }
 
 .button {
-    background-color: #1C2526; /* 與 title-row 一致，使用更深的暗青色 */
+    background-color: #1C2526;
     color: white;
     padding: 8px 16px;
     border: none;
@@ -101,30 +114,28 @@
 }
 
 .button:hover {
-    background-color: #0F1414; /* 按鈕懸停時使用更深的冷色（幾乎黑色，但帶冷調） */
+    background-color: #0F1414;
 }
 
 .button-container {
-    text-align: center; /* 按鈕置中對齊 */
+    text-align: center;
     margin: 10px 0;
 }
 
 h2 {
-    text-align: center !important; /* 標題置中對齊，增加優先級 */
+    text-align: center !important;
 }
 
-/* 首頁表單置中 */
 .upload-form {
-    text-align: center; /* 表單內容置中 */
+    text-align: center;
     margin: 20px 0;
 }
 
 .upload-input {
-    display: block; /* 讓檔案選擇框獨占一行 */
-    margin: 10px auto; /* 置中對齊 */
+    display: block;
+    margin: 10px auto;
 }
 
-/* 下拉選單 */
 .week-selector {
     padding: 5px;
     font-size: 16px;
@@ -135,5 +146,5 @@ h2 {
 }
 
 .week-selector-container {
-    text-align: center; /* 下拉選單置中 */
+    text-align: center;
 }
