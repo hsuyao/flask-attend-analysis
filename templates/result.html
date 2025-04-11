@@ -1,42 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <title>Attendance Result</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body>
-    <div class="button-container">
-        <a href="/" class="button">返回上傳頁面</a>
-        {% if has_file_stream %}
-        <a href="/download" class="button">下載 Excel</a>
-        {% endif %}
-    </div>
-    <div class="week-selector-container">
-        <select id="week-selector" class="week-selector">
-            {% for week_name, idx in week_options %}
-            <option value="{{ idx }}" {% if idx == selected_week_idx %}selected{% endif %}>{{ week_name }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="table-container">
-        {{ attendance_table_html | safe }}
-    </div>
-
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const weekSelector = document.getElementById('week-selector');
-            weekSelector.addEventListener('change', function() {
-                const selectedWeekIdx = this.value;
-                fetch(`/get_week_data/${selectedWeekIdx}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const container = document.querySelector('.table-container');
-                        container.innerHTML = data.attendance_table;
-                    })
-                    .catch(error => {
-                        console.error('Error fetching week data:', error);
-                    });
+        function updateTable() {
+            var weekIdx = document.getElementById('weekSelector').value;
+            $.ajax({
+                url: '/get_week_data/' + weekIdx,
+                type: 'GET',
+                success: function(response) {
+                    if (response.attendance_table) {
+                        $('#attendanceTable').html(response.attendance_table);
+                        console.log('Table updated successfully');
+                    } else {
+                        console.error('No attendance_table in response:', response);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX error:', status, error);
+                }
             });
+        }
+
+        $(document).ready(function() {
+            $('#weekSelector').on('change', updateTable);
+            // 頁面載入時觸發一次，確保初始顯示正確
+            updateTable();
         });
     </script>
+</head>
+<body>
+    <div class="table-container">
+        <div class="week-selector-container">
+            <select id="weekSelector" class="week-selector">
+                {% for week_name, idx in week_options %}
+                    <option value="{{ idx }}" {% if idx == selected_week_idx %}selected{% endif %}>
+                        {{ week_name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div id="attendanceTable">
+            {{ attendance_table_html | safe }}
+        </div>
+    </div>
+    <div class="button-container">
+        {% if has_file_stream %}
+            <a href="{{ url_for('download_file') }}" class="button">Download Processed File</a>
+        {% endif %}
+        <a href="{{ url_for('index') }}" class="button">Back to Upload</a>
+    </div>
 </body>
 </html>

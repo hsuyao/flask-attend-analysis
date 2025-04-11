@@ -96,13 +96,12 @@ def result():
 @app.route('/get_week_data/<int:week_idx>')
 def get_week_data(week_idx):
     all_attendance_data = session.get('all_attendance_data', [])
-    latest_district_counts = session.get('latest_district_counts')
-    latest_main_district_counts = session.get('latest_main_district_counts')
+    latest_district_counts = session.get('latest_district_counts', {})
+    latest_main_district_counts = session.get('latest_main_district_counts', {})
     
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
-            'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>',
-            'stats_table': ''
+            'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
         }), 400
     
     _, attendance_data, week_name = all_attendance_data[week_idx]
@@ -116,8 +115,7 @@ def get_week_data(week_idx):
     )
     
     return jsonify({
-        'attendance_table': attendance_table_html,
-        'stats_table': ''
+        'attendance_table': attendance_table_html
     })
 
 @app.route('/download', methods=['GET'])
