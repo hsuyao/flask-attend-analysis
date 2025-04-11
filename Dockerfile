@@ -21,8 +21,9 @@ RUN pip install --upgrade pip && \
 # Copy the rest of the application files
 COPY . .
 
-# 在构建时获取 commit ID 并写入文件
-RUN git rev-parse HEAD > /app/commit_id.txt || echo "Unknown" > /app/commit_id.txt
+# 在构建时获取 commit ID 和日期，写入 version_info.txt
+# 如果没有 git 环境，则使用默认值
+RUN echo "$(git rev-parse HEAD 2>/dev/null || echo 'Unknown')-$(date -u +%Y%m%d)" > /app/version_info.txt || echo "Unknown-Unknown" > /app/version_info.txt
 
 # Create a directory for session storage
 RUN mkdir -p /app/sessions
