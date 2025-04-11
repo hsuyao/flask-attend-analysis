@@ -34,7 +34,7 @@
 }
 
 .excel-table .title-row th {
-    background-color: #005566;
+    background-color: #1C2526; /* 改為更深的暗青色（比 #2F4F4F 更深） */
     color: white;
     text-align: center;
     font-weight: bold;
@@ -43,14 +43,14 @@
 }
 
 .excel-table .header th {
-    background-color: #107C10;
+    background-color: #2F4F4F; /* 改為暗青色（比 #4682B4 更深） */
     color: white;
     padding: 2px;
     line-height: 1.2;
 }
 
 .excel-table .subheader th {
-    background-color: #5DBB63;
+    background-color: #5F9EA0; /* 改為較深的青色（CadetBlue，比 #B0C4DE 更深） */
     color: white;
     padding: 2px;
     line-height: 1.2;
@@ -72,7 +72,7 @@
 }
 
 .excel-table .district-header {
-    background-color: #107C10;
+    background-color: #2F4F4F; /* 與 header 一致，使用暗青色 */
     color: white;
     text-align: center;
     font-weight: bold;
@@ -89,7 +89,7 @@
 }
 
 .button {
-    background-color: #005566;
+    background-color: #1C2526; /* 與 title-row 一致，使用更深的暗青色 */
     color: white;
     padding: 8px 16px;
     border: none;
@@ -100,7 +100,7 @@
 }
 
 .button:hover {
-    background-color: #003f4c;
+    background-color: #0F1414; /* 按鈕懸停時使用更深的冷色（幾乎黑色，但帶冷調） */
 }
 
 .button-container {
@@ -112,7 +112,7 @@ h2 {
     text-align: center !important; /* 標題置中對齊，增加優先級 */
 }
 
-/* 新增樣式：首頁表單置中 */
+/* 首頁表單置中 */
 .upload-form {
     text-align: center; /* 表單內容置中 */
     margin: 20px 0;
@@ -123,7 +123,7 @@ h2 {
     margin: 10px auto; /* 置中對齊 */
 }
 
-/* 新增樣式：下拉選單 */
+/* 下拉選單 */
 .week-selector {
     padding: 5px;
     font-size: 16px;
