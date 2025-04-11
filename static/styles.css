@@ -33,8 +33,8 @@
 }
 
 .stats-wrapper {
-    max-height: 70vh; /* 與名單表高度一致 */
-    overflow-y: auto; /* 添加垂直滾動 */
+    max-height: 70vh;
+    overflow-y: auto;
     min-width: 200px;
 }
 
@@ -82,6 +82,12 @@
     color: white;
     padding: 2px;
     line-height: 1.2;
+}
+
+.excel-table .total-row {
+    background-color: #B0E0E6; /* 淺藍色，用於突出總計行 */
+    color: black;
+    font-weight: bold;
 }
 
 .excel-table tr.even {

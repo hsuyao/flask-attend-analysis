@@ -99,7 +99,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             html += '</tr>\n'
         html += '</table>\n</div>\n'
 
-        # 統計表（包含年齡層，使用與名單表相同的顏色）
+        # 統計表（總計移至標題行並染色）
         stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=parse_district)
         sub_districts_stats = [d for d in stats_districts if d.startswith(main_district)]
         if sub_districts_stats:
@@ -109,31 +109,24 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             
             # 子區統計
             for district in sub_districts_stats:
-                row_class = "even" if row_index % 2 == 0 else "odd"
-                html += f'<tr class="{row_class}"><td style="padding-left: 15px;">{district}</td><td></td></tr>\n'
+                total = latest_district_counts[district]['total']
+                html += f'<tr class="total-row"><td style="padding-left: 15px;">{district}</td><td>{total}</td></tr>\n'
                 row_index += 1
                 for age in age_categories:
                     count = latest_district_counts[district]['ages'][age]
                     row_class = "even" if row_index % 2 == 0 else "odd"
                     html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
                     row_index += 1
-                total = latest_district_counts[district]['total']
-                row_class = "even" if row_index % 2 == 0 else "odd"
-                html += f'<tr class="{row_class}"><td style="padding-left: 15px;">總計</td><td>{total}</td></tr>\n'
-                row_index += 1
             
             # 主區統計
-            row_class = "even" if row_index % 2 == 0 else "odd"
-            html += f'<tr class="{row_class}"><td style="padding-left: 15px;">{main_district}</td><td></td></tr>\n'
+            total = latest_main_district_counts[main_district]['total']
+            html += f'<tr class="total-row"><td style="padding-left: 15px;">{main_district}</td><td>{total}</td></tr>\n'
             row_index += 1
             for age in age_categories:
                 count = latest_main_district_counts[main_district]['ages'][age]
                 row_class = "even" if row_index % 2 == 0 else "odd"
                 html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
                 row_index += 1
-            total = latest_main_district_counts[main_district]['total']
-            row_class = "even" if row_index % 2 == 0 else "odd"
-            html += f'<tr class="{row_class}"><td style="padding-left: 15px;">總計</td><td>{total}</td></tr>\n'
 
             html += '</table>\n</div>\n'
 
