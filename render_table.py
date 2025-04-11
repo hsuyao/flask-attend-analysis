@@ -2,8 +2,14 @@ from config import logger
 from utils import chinese_to_int, parse_district
 
 def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, latest_district_counts, latest_main_district_counts):
-    districts = sorted(set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys()), 
-                      key=parse_district)
+    # 獲取所有區域名稱
+    all_districts = set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys())
+    
+    # 只保留具體子區（排除僅有大區的鍵）
+    districts = sorted(
+        [d for d in all_districts if len(parse_district(d)) > 1 and parse_district(d)[1]],  # 確保有子區資訊且子區非空
+        key=parse_district
+    )
     
     if not districts:
         return """
