@@ -4,14 +4,13 @@
     flex-direction: row; /* 確保水平排列 */
     align-items: flex-start; /* 表格頂部對齊 */
     justify-content: center; /* 表格置中對齊 */
-    gap: 5px; /* 表格間距改為 5px，拉近兩個表格 */
+    gap: 5px; /* 表格間距 */
 }
 
 .table-wrapper {
     overflow-x: auto;
     margin: 20px 0; /* 移除左右 margin，僅保留上下間距 */
     text-align: left; /* 表格內部文字靠左，但整體置中 */
-    /* 移除 flex: 1，改用 JavaScript 動態設置寬度 */
 }
 
 .excel-table {
@@ -111,4 +110,29 @@
 
 h2 {
     text-align: center !important; /* 標題置中對齊，增加優先級 */
+}
+
+/* 新增樣式：首頁表單置中 */
+.upload-form {
+    text-align: center; /* 表單內容置中 */
+    margin: 20px 0;
+}
+
+.upload-input {
+    display: block; /* 讓檔案選擇框獨占一行 */
+    margin: 10px auto; /* 置中對齊 */
+}
+
+/* 新增樣式：下拉選單 */
+.week-selector {
+    padding: 5px;
+    font-size: 16px;
+    margin: 10px 0;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.week-selector-container {
+    text-align: center; /* 下拉選單置中 */
 }

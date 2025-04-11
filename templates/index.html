@@ -5,10 +5,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <h2>上傳 Excel 檔案進行分析</h2>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".xls,.xlsx">
-        <input type="submit" value="上傳並分析" class="button">
+    <h2>上傳點名系統報表進行統計</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
+        <input type="file" name="file" accept=".xls,.xlsx" class="upload-input">
+        <input type="button" value="以週為單位進行統計" class="button" onclick="this.form.submit();">
     </form>
 </body>
 </html>

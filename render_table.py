@@ -16,14 +16,17 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                       key=lambda x: chinese_to_int(x[3:4]))
     max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in districts)
     
+    # Find the previous week's data by comparing dates
     previous_week_data = None
-    if len(all_attendance_data) > 1:
-        all_attendance_data.sort(key=lambda x: x[0])
-        latest_date = all_attendance_data[-1][0]
-        for date, data, week_name in reversed(all_attendance_data[:-1]):
-            if date < latest_date:
-                previous_week_data = data
-                break
+    all_attendance_data.sort(key=lambda x: x[0])  # Sort by date
+    current_week_idx = None
+    for idx, (date, data, week_name) in enumerate(all_attendance_data):
+        if week_name == week_display:
+            current_week_idx = idx
+            break
+    
+    if current_week_idx is not None and current_week_idx > 0:
+        previous_week_data = all_attendance_data[current_week_idx - 1][1]  # Previous week's data
 
     sorted_attended = {}
     sorted_not_attended = {}
