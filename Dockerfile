@@ -21,6 +21,9 @@ RUN pip install --upgrade pip && \
 # Copy the rest of the application files
 COPY . .
 
+# 在构建时获取 commit ID 并写入文件
+RUN git rev-parse HEAD > /app/commit_id.txt || echo "Unknown" > /app/commit_id.txt
+
 # Create a directory for session storage
 RUN mkdir -p /app/sessions
 
@@ -29,4 +32,3 @@ EXPOSE 5000
 
 # Command to run the application
 CMD ["python", "app.py"]
-
