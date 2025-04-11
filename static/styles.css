@@ -8,9 +8,10 @@
 }
 
 .table-wrapper {
-    overflow-x: auto;
+    overflow-x: auto; /* 水平滾動條 */
     margin: 20px 0; /* 移除左右 margin，僅保留上下間距 */
-    text-align: left; /* 表格內部文字靠左，但整體置中 */
+    text-align: left; /* 表格內部文字靠左 */
+    min-width: 200px; /* 確保表格有最小寬度 */
 }
 
 .excel-table {

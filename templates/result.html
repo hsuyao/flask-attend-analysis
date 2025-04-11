@@ -1,4 +1,3 @@
-<!-- templates/result.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -28,47 +27,15 @@
     </div>
 
     <script>
-        // 當頁面載入完成後執行
         document.addEventListener('DOMContentLoaded', function() {
-            // 動態調整 div 寬度
-            const attendanceTable = document.querySelector('#attendance-table-wrapper .excel-table');
-            const statsTable = document.querySelector('#stats-table-wrapper .excel-table');
-            
-            if (attendanceTable && statsTable) {
-                const attendanceWidth = attendanceTable.scrollWidth;
-                const statsWidth = statsTable.scrollWidth;
-
-                const attendanceWrapper = document.getElementById('attendance-table-wrapper');
-                const statsWrapper = document.getElementById('stats-table-wrapper');
-
-                attendanceWrapper.style.width = (attendanceWidth + 2) + 'px';
-                statsWrapper.style.width = (statsWidth + 2) + 'px';
-            }
-
-            // 監聽下拉選單選擇事件
             const weekSelector = document.getElementById('week-selector');
             weekSelector.addEventListener('change', function() {
                 const selectedWeekIdx = this.value;
-
-                // 發送 AJAX 請求獲取對應週別的資料
                 fetch(`/get_week_data/${selectedWeekIdx}`)
                     .then(response => response.json())
                     .then(data => {
-                        // 更新表格
                         document.getElementById('attendance-table-wrapper').innerHTML = data.attendance_table;
                         document.getElementById('stats-table-wrapper').innerHTML = data.stats_table;
-
-                        // 重新調整 div 寬度
-                        const newAttendanceTable = document.querySelector('#attendance-table-wrapper .excel-table');
-                        const newStatsTable = document.querySelector('#stats-table-wrapper .excel-table');
-                        
-                        if (newAttendanceTable && newStatsTable) {
-                            const newAttendanceWidth = newAttendanceTable.scrollWidth;
-                            const newStatsWidth = newStatsTable.scrollWidth;
-
-                            document.getElementById('attendance-table-wrapper').style.width = (newAttendanceWidth + 2) + 'px';
-                            document.getElementById('stats-table-wrapper').style.width = (newStatsWidth + 2) + 'px';
-                        }
                     })
                     .catch(error => {
                         console.error('Error fetching week data:', error);
@@ -76,5 +43,5 @@
             });
         });
     </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'92e79feead4eb097',t:'MTc0NDM0NDUyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

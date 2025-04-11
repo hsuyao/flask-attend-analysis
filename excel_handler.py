@@ -1,4 +1,3 @@
-# excel_handler.py
 import os
 import subprocess
 import tempfile
@@ -59,6 +58,7 @@ def classify_attendance(sheet, week_col):
     attended = {}
     not_attended = {}
     district_counts = {}
+    main_district_counts = {}  # 新增：按大區统计
     youth_above = {'年長', '中壯', '青壯', '青職'}
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     max_row = sheet.max_row
@@ -81,19 +81,23 @@ def classify_attendance(sheet, week_col):
             attended[district].append(name)
             if district not in district_counts:
                 district_counts[district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
+            if main_district_value not in main_district_counts:
+                main_district_counts[main_district_value] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
             district_counts[district]['total'] += 1
+            main_district_counts[main_district_value]['total'] += 1
             effective_age = '青職以上' if age in youth_above or not age else age
             if effective_age not in age_categories:
                 logger.warning(f"Unrecognized age '{age}' for {name} in {district}, defaulting to '青職以上'")
                 effective_age = '青職以上'
             district_counts[district]['ages'][effective_age] += 1
+            main_district_counts[main_district_value]['ages'][effective_age] += 1
         else:
             if district not in not_attended:
                 not_attended[district] = []
             not_attended[district].append(name)
     total_attendance = sum(d['total'] for d in district_counts.values())
     district_counts['總計'] = total_attendance
-    return attended, not_attended, district_counts, main_district
+    return attended, not_attended, district_counts, main_district, main_district_counts  # 新增返回值
 
 def write_summary(new_sheet, attended, not_attended):
     logger.debug(f"Writing summary with attended: {attended}, not_attended: {not_attended}")
@@ -180,9 +184,10 @@ def process_excel(file_stream, file_extension):
     latest_week = None
     latest_districts = None
     latest_main_district = None
+    latest_main_district_counts = None  # 新增
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
-        attended, not_attended, district_counts, main_district = classify_attendance(input_sheet, col)
+        attended, not_attended, district_counts, main_district, main_district_counts = classify_attendance(input_sheet, col)
         if main_district and not latest_main_district:
             latest_main_district = main_district
 
@@ -204,6 +209,7 @@ def process_excel(file_stream, file_extension):
             latest_not_attended = not_attended
             latest_week = f"{month_prefix}{week_name}"
             latest_districts = district_counts
+            latest_main_district_counts = main_district_counts  # 新增
 
         if new_sheet_name in workbook.sheetnames:
             logger.error(f"Duplicate sheet name detected: {new_sheet_name}")
@@ -218,7 +224,6 @@ def process_excel(file_stream, file_extension):
     output_stream.seek(0)
     logger.info("File processing completed successfully")
 
-    # Return all necessary data for session storage
     return {
         'output_stream': output_stream,
         'latest_analytic_date': latest_date.strftime("%Y年%m月%d日") if latest_date else None,
@@ -226,5 +231,6 @@ def process_excel(file_stream, file_extension):
         'latest_week_display': latest_week,
         'latest_district_counts': latest_districts,
         'latest_main_district': latest_main_district,
+        'latest_main_district_counts': latest_main_district_counts,  # 新增
         'all_attendance_data': all_attendance_data
     }

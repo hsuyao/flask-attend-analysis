@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask, request, jsonify, send_file, redirect, url_for, session, render_template
 from flask_session import Session
 from io import BytesIO
@@ -49,6 +48,7 @@ def upload_file():
         session['latest_week_display'] = result['latest_week_display']
         session['latest_district_counts'] = result['latest_district_counts']
         session['latest_main_district'] = result['latest_main_district']
+        session['latest_main_district_counts'] = result['latest_main_district_counts']  # 新增
         session['all_attendance_data'] = result['all_attendance_data']
         
         # Store the file stream in session (as bytes, since BytesIO is not JSON-serializable)
@@ -68,6 +68,7 @@ def result():
     latest_week_display = session.get('latest_week_display', "No week data available yet")
     latest_district_counts = session.get('latest_district_counts')
     latest_main_district = session.get('latest_main_district')
+    latest_main_district_counts = session.get('latest_main_district_counts')  # 新增
     all_attendance_data = session.get('all_attendance_data', [])
     
     # Sort all_attendance_data by date
@@ -81,7 +82,8 @@ def result():
     )
     stats_table_html = render_stats_table(
         latest_district_counts,
-        latest_main_district
+        latest_main_district,
+        latest_main_district_counts  # 新增参数
     )
     
     # Prepare week options for the dropdown
@@ -102,6 +104,7 @@ def get_week_data(week_idx):
     all_attendance_data = session.get('all_attendance_data', [])
     latest_district_counts = session.get('latest_district_counts')
     latest_main_district = session.get('latest_main_district')
+    latest_main_district_counts = session.get('latest_main_district_counts')  # 新增
     
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
@@ -119,10 +122,11 @@ def get_week_data(week_idx):
         all_attendance_data
     )
     
-    # Generate stats table (use the latest district counts for simplicity, or recompute if needed)
+    # Generate stats table
     stats_table_html = render_stats_table(
         latest_district_counts,
-        latest_main_district
+        latest_main_district,
+        latest_main_district_counts  # 新增参数
     )
     
     return jsonify({
