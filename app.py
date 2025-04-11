@@ -4,6 +4,7 @@ from io import BytesIO
 import uuid
 import os
 import traceback
+import subprocess
 from config import logger
 from excel_handler import process_excel
 from render_table import render_attendance_table
@@ -14,9 +15,21 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 Session(app)
 
+def get_git_commit_id():
+    try:
+        commit_id = subprocess.check_output(['git', 'rev-parse', 'HEAD'], stderr=subprocess.STDOUT).decode('utf-8').strip()
+        return commit_id[:7]  # 返回前 7 位短版本
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to get Git commit ID: {e.output.decode('utf-8')}")
+        return "Unknown"
+    except Exception as e:
+        logger.error(f"Error retrieving Git commit ID: {str(e)}")
+        return "Unknown"
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    commit_id = get_git_commit_id()
+    return render_template('index.html', commit_id=commit_id)
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -42,7 +55,8 @@ def upload_file():
         result = process_excel(file.stream, file_extension)
         
         if not result['all_attendance_data']:
-            return render_template('index.html', error="上傳的文件中無任何出席紀錄，請檢查數據後重新上傳。")
+            commit_id = get_git_commit_id()
+            return render_template('index.html', error="上傳的文件中無任何出席紀錄，請檢查數據後重新上傳。", commit_id=commit_id)
 
         session['latest_analytic_date'] = result['latest_analytic_date']
         session['latest_attendance_data'] = result['latest_attendance_data']
@@ -70,7 +84,8 @@ def result():
     all_attendance_data = session.get('all_attendance_data', [])
     
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
-        return render_template('index.html', error="最新週無有效出席數據，請檢查文件內容。")
+        commit_id = get_git_commit_id()
+        return render_template('index.html', error="最新週無有效出席數據，請檢查文件內容。", commit_id=commit_id)
 
     all_attendance_data.sort(key=lambda x: x[0])
     
@@ -84,13 +99,15 @@ def result():
     
     week_options = [(week_name, idx) for idx, (_, _, week_name) in enumerate(all_attendance_data)]
     
+    commit_id = get_git_commit_id()
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
         stats_table_html="",
         has_file_stream='latest_file_stream' in session,
         week_options=week_options,
-        selected_week_idx=len(all_attendance_data) - 1 if all_attendance_data else 0
+        selected_week_idx=len(all_attendance_data) - 1 if all_attendance_data else 0,
+        commit_id=commit_id
     )
 
 @app.route('/get_week_data/<int:week_idx>')
