@@ -17,13 +17,11 @@ Session(app)
 
 def get_git_commit_id():
     try:
-        commit_id = subprocess.check_output(['git', 'rev-parse', 'HEAD'], stderr=subprocess.STDOUT).decode('utf-8').strip()
-        return commit_id[:7]  # 返回前 7 位短版本
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to get Git commit ID: {e.output.decode('utf-8')}")
-        return "Unknown"
+        with open('/app/commit_id.txt', 'r') as f:
+            commit_id = f.read().strip()
+        return commit_id[:7]
     except Exception as e:
-        logger.error(f"Error retrieving Git commit ID: {str(e)}")
+        logger.error(f"Error reading commit ID: {str(e)}")
         return "Unknown"
 
 @app.route('/')
