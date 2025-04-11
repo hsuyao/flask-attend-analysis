@@ -4,14 +4,14 @@
     flex-direction: row; /* 確保水平排列 */
     align-items: flex-start; /* 表格頂部對齊 */
     justify-content: center; /* 表格置中對齊 */
-    gap: 2em; /* 兩個表格之間的距離為 2 個中文字寬 (約 2em) */
+    gap: 5px; /* 表格間距改為 5px，拉近兩個表格 */
 }
 
 .table-wrapper {
     overflow-x: auto;
     margin: 20px 0; /* 移除左右 margin，僅保留上下間距 */
     text-align: left; /* 表格內部文字靠左，但整體置中 */
-    flex: 1; /* 讓表格根據內容自動調整寬度 */
+    /* 移除 flex: 1，改用 JavaScript 動態設置寬度 */
 }
 
 .excel-table {
@@ -108,7 +108,7 @@
     text-align: center; /* 按鈕置中對齊 */
     margin: 10px 0;
 }
-/* static/styles.css */
+
 h2 {
-    text-align: center; /* 標題置中對齊 */
+    text-align: center !important; /* 標題置中對齊，增加優先級 */
 }

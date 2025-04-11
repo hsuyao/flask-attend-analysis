@@ -12,12 +12,34 @@
         {% endif %}
     </div>
     <div class="table-container">
-        <div class="table-wrapper">
+        <div class="table-wrapper" id="attendance-table-wrapper">
             {{ attendance_table_html | safe }}
         </div>
-        <div class="table-wrapper">
+        <div class="table-wrapper" id="stats-table-wrapper">
             {{ stats_table_html | safe }}
         </div>
     </div>
+
+    <script>
+        // 當頁面載入完成後執行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 獲取出席名單表格的寬度
+            const attendanceTable = document.querySelector('#attendance-table-wrapper .excel-table');
+            const statsTable = document.querySelector('#stats-table-wrapper .excel-table');
+            
+            if (attendanceTable && statsTable) {
+                // 計算表格的實際寬度（包括滾動條）
+                const attendanceWidth = attendanceTable.scrollWidth;
+                const statsWidth = statsTable.scrollWidth;
+
+                // 設置 div.table-wrapper 的寬度為表格寬度 + 2px
+                const attendanceWrapper = document.getElementById('attendance-table-wrapper');
+                const statsWrapper = document.getElementById('stats-table-wrapper');
+
+                attendanceWrapper.style.width = (attendanceWidth + 2) + 'px';
+                statsWrapper.style.width = (statsWidth + 2) + 'px';
+            }
+        });
+    </script>
 </body>
 </html>
