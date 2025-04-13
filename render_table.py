@@ -15,7 +15,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         return """
         <div class="district-section">
             <table class="excel-table">
-                <tr class="title-row"><th>該週無有效數據</th></tr>
+                <tr class="title-row"><th>無資料</th></tr>
             </table>
         </div>
         """
@@ -46,27 +46,31 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             attended_list = latest_attendance_data['attended'].get(district, [])
             not_attended_list = latest_attendance_data['not_attended'].get(district, [])
             
+            # 合并出勤和未出勤名单，按出勤率排序
+            combined_list = [(name, True) for name in attended_list] + [(name, False) for name in not_attended_list]
+            combined_list.sort(key=lambda x: avg_attendance_rates.get(x[0], 0.0), reverse=True)
+            
             attended_with_highlights = []
             not_attended_with_highlights = []
             if previous_week_data:
                 prev_attended = previous_week_data['attended'].get(district, [])
                 prev_not_attended = previous_week_data['not_attended'].get(district, [])
                 
-                for name in attended_list:
+                for name, is_attended in combined_list:
                     display_name = name[:4] if len(name) > 4 else name
-                    highlight = 'highlight-green' if name in prev_not_attended else ''
-                    attended_with_highlights.append((name, display_name, highlight))
-                
-                for name in not_attended_list:
-                    display_name = name[:4] if len(name) > 4 else name
-                    highlight = 'highlight-red' if name in prev_attended else ''
-                    not_attended_with_highlights.append((name, display_name, highlight))
+                    if is_attended:
+                        highlight = 'highlight-green' if name in prev_not_attended else ''
+                        attended_with_highlights.append((name, display_name, highlight))
+                    else:
+                        highlight = 'highlight-red' if name in prev_attended else ''
+                        not_attended_with_highlights.append((name, display_name, highlight))
             else:
-                attended_with_highlights = [(name, name[:4] if len(name) > 4 else name, '') for name in attended_list]
-                not_attended_with_highlights = [(name, name[:4] if len(name) > 4 else name, '') for name in not_attended_list]
-            
-            attended_with_highlights.sort(key=lambda x: (x[2] == '', x[0]))
-            not_attended_with_highlights.sort(key=lambda x: (x[2] == '', x[0]))
+                for name, is_attended in combined_list:
+                    display_name = name[:4] if len(name) > 4 else name
+                    if is_attended:
+                        attended_with_highlights.append((name, display_name, ''))
+                    else:
+                        not_attended_with_highlights.append((name, display_name, ''))
             
             sorted_attended[district] = attended_with_highlights
             sorted_not_attended[district] = not_attended_with_highlights
@@ -76,15 +80,15 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         html += '<div class="district-container">\n'
 
         html += '<div class="table-wrapper attendance-wrapper">\n<table class="excel-table">\n'
-        total_cols = len(sub_districts) * 3
+        total_cols = len(sub_districts) * 2  # 移除出勤率列，每区 2 列
         html += f'<tr class="header"><th colspan="{total_cols}">{main_district}</th></tr>\n'
         html += '<tr class="district-row">\n'
         for district in sub_districts:
-            html += f'<th colspan="3">{district}</th>'
+            html += f'<th colspan="2">{district}</th>'
         html += '</tr>\n'
         html += '<tr class="subheader">\n'
         for _ in sub_districts:
-            html += '<th>本週到會</th><th>未到會</th><th>半年平均出勤率</th>'
+            html += '<th>本週到會</th><th>未到會</th>'
         html += '</tr>\n'
 
         for r in range(max_len):
@@ -99,9 +103,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                 not_attended_display = not_attended_info[1]
                 attended_class = attended_info[2]
                 not_attended_class = not_attended_info[2]
-                name = attended_info[0] if attended_info[0] else not_attended_info[0]
-                avg_rate = avg_attendance_rates.get(name, 0.0)
-                html += f'<td class="{attended_class}">{attended_display}</td><td class="{not_attended_class}">{not_attended_display}</td><td>{avg_rate:.2%}</td>'
+                html += f'<td class="{attended_class}">{attended_display}</td><td class="{not_attended_class}">{not_attended_display}</td>'
             html += '</tr>\n'
         html += '</table>\n</div>\n'
 

@@ -48,7 +48,7 @@
     padding: 2px;
     text-align: left;
     vertical-align: top;
-    min-width: 90px;
+    min-width: 120px; /* 增加列宽以适应姓名 */
     line-height: 1.2;
 }
 
