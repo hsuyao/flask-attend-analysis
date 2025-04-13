@@ -22,14 +22,10 @@ RUN pip install --upgrade pip && \
 COPY . .
 
 # 在构建时获取 commit ID 和日期，写入 version_info.txt
-# 如果没有 git 环境，则使用默认值
 RUN echo "$(git rev-parse HEAD 2>/dev/null || echo 'Unknown')-$(date -u +%Y%m%d)" > /app/version_info.txt || echo "Unknown-Unknown" > /app/version_info.txt
 
-# Create a directory for session storage
-RUN mkdir -p /app/sessions
+# Create directories for session storage and database
+RUN mkdir -p /app/sessions /app/db
 
-# Expose the port
-EXPOSE 5000
-
-# Command to run the application
-CMD ["python", "app.py"]
+# Command to run the application with database initialization
+CMD ["sh", "-c", "python -c 'from database import init_database; init_database()' && python app.py"]

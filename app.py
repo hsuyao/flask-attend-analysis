@@ -4,10 +4,10 @@ from io import BytesIO
 import uuid
 import os
 import traceback
-import subprocess
 from config import logger
 from excel_handler import process_excel
 from render_table import render_attendance_table
+from database import init_database, get_six_month_average
 
 app = Flask(__name__)
 
@@ -15,19 +15,19 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 Session(app)
 
-def get_git_commit_id():
+def get_version_info():
     try:
-        with open('/app/commit_id.txt', 'r') as f:
-            commit_id = f.read().strip()
-        return commit_id[:7]
+        with open('/app/version_info.txt', 'r') as f:
+            version = f.read().strip()
+        return version
     except Exception as e:
-        logger.error(f"Error reading commit ID: {str(e)}")
-        return "Unknown"
+        logger.error(f"Error reading version info: {str(e)}")
+        return "Unknown-Unknown"
 
 @app.route('/')
 def index():
-    commit_id = get_git_commit_id()
-    return render_template('index.html', commit_id=commit_id)
+    version = get_version_info()
+    return render_template('index.html', version=version)
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -53,8 +53,8 @@ def upload_file():
         result = process_excel(file.stream, file_extension)
         
         if not result['all_attendance_data']:
-            commit_id = get_git_commit_id()
-            return render_template('index.html', error="上傳的文件中無任何出席紀錄，請檢查數據後重新上傳。", commit_id=commit_id)
+            version = get_version_info()
+            return render_template('index.html', error="上傳的文件中無任何出席紀錄，請檢查數據後重新上傳。", version=version)
 
         session['latest_analytic_date'] = result['latest_analytic_date']
         session['latest_attendance_data'] = result['latest_attendance_data']
@@ -82,22 +82,33 @@ def result():
     all_attendance_data = session.get('all_attendance_data', [])
     
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
-        commit_id = get_git_commit_id()
-        return render_template('index.html', error="最新週無有效出席數據，請檢查文件內容。", commit_id=commit_id)
+        version = get_version_info()
+        return render_template('index.html', error="最新週無有效出席數據，請檢查文件內容。", version=version)
 
     all_attendance_data.sort(key=lambda x: x[0])
     
+    # 计算每人的移动平均出勤率
+    latest_date = all_attendance_data[-1][0]
+    avg_attendance_rates = {}
+    for district, names in latest_attendance_data['attended'].items():
+        for name in names:
+            avg_attendance_rates[name] = get_six_month_average(name, latest_date)
+    for district, names in latest_attendance_data['not_attended'].items():
+        for name in names:
+            avg_attendance_rates[name] = get_six_month_average(name, latest_date)
+
     attendance_table_html = render_attendance_table(
         latest_week_display,
         latest_attendance_data,
         all_attendance_data,
         latest_district_counts,
-        latest_main_district_counts
+        latest_main_district_counts,
+        avg_attendance_rates
     )
     
     week_options = [(week_name, idx) for idx, (_, _, week_name) in enumerate(all_attendance_data)]
     
-    commit_id = get_git_commit_id()
+    version = get_version_info()
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
@@ -105,7 +116,7 @@ def result():
         has_file_stream='latest_file_stream' in session,
         week_options=week_options,
         selected_week_idx=len(all_attendance_data) - 1 if all_attendance_data else 0,
-        commit_id=commit_id
+        version=version
     )
 
 @app.route('/get_week_data/<int:week_idx>')
@@ -119,14 +130,23 @@ def get_week_data(week_idx):
             'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
         }), 400
     
-    _, attendance_data, week_name = all_attendance_data[week_idx]
+    date, attendance_data, week_name = all_attendance_data[week_idx]
+    
+    avg_attendance_rates = {}
+    for district, names in attendance_data['attended'].items():
+        for name in names:
+            avg_attendance_rates[name] = get_six_month_average(name, date)
+    for district, names in attendance_data['not_attended'].items():
+        for name in names:
+            avg_attendance_rates[name] = get_six_month_average(name, date)
     
     attendance_table_html = render_attendance_table(
         week_name,
         attendance_data,
         all_attendance_data,
         latest_district_counts,
-        latest_main_district_counts
+        latest_main_district_counts,
+        avg_attendance_rates
     )
     
     return jsonify({
@@ -147,6 +167,7 @@ def download_file():
     )
 
 if __name__ == '__main__':
+    init_database()
     port = int(os.getenv('PORT', 5000))
     logger.info(f"Starting server on port {port}")
     app.run(debug=False, host='0.0.0.0', port=port)

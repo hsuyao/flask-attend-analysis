@@ -2,14 +2,15 @@ import os
 import subprocess
 import tempfile
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
+import sqlite3
 from config import logger, START_COLUMN
 from utils import chinese_to_int
+from database import add_attendance_record, get_six_month_average, DATABASE_PATH
 
 def convert_xls_to_xlsx(file_stream):
-    """Convert .xls to .xlsx using soffice command."""
     logger.info("Converting .xls to .xlsx using soffice")
     file_stream.seek(0)
     file_content = file_stream.read()
@@ -52,7 +53,7 @@ def convert_xls_to_xlsx(file_stream):
         if os.path.exists(temp_xlsx_path):
             os.remove(temp_xlsx_path)
 
-def classify_attendance(sheet, week_col):
+def classify_attendance(sheet, week_col, week_date):
     main_district = None
     logger.debug(f"Classifying attendance for week column: {week_col}")
     attended = {}
@@ -75,6 +76,13 @@ def classify_attendance(sheet, week_col):
             main_district = main_district_value
             logger.debug(f"Set main district name to: {main_district}")
         attendance = sheet.cell(row, week_col + 1).value
+        effective_age = '青職以上' if age in youth_above or not age else age
+        if effective_age not in age_categories:
+            logger.warning(f"Unrecognized age '{age}' for {name} in {district}, defaulting to '青職以上'")
+            effective_age = '青職以上'
+        
+        add_attendance_record(name, week_date, 1 if attendance == 1 else 0, district, effective_age)
+        
         if attendance == 1:
             if district not in attended:
                 attended[district] = []
@@ -85,10 +93,6 @@ def classify_attendance(sheet, week_col):
                 main_district_counts[main_district_value] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
             district_counts[district]['total'] += 1
             main_district_counts[main_district_value]['total'] += 1
-            effective_age = '青職以上' if age in youth_above or not age else age
-            if effective_age not in age_categories:
-                logger.warning(f"Unrecognized age '{age}' for {name} in {district}, defaulting to '青職以上'")
-                effective_age = '青職以上'
             district_counts[district]['ages'][effective_age] += 1
             main_district_counts[main_district_value]['ages'][effective_age] += 1
         else:
@@ -99,7 +103,7 @@ def classify_attendance(sheet, week_col):
     district_counts['總計'] = total_attendance
     return attended, not_attended, district_counts, main_district, main_district_counts
 
-def write_summary(new_sheet, attended, not_attended):
+def write_summary(new_sheet, attended, not_attended, latest_date):
     logger.debug(f"Writing summary with attended: {attended}, not_attended: {not_attended}")
     districts = sorted(set(attended.keys()).union(not_attended.keys()), key=lambda x: chinese_to_int(x[3:4]))
     row = 1
@@ -108,27 +112,37 @@ def write_summary(new_sheet, attended, not_attended):
     subheader_fill = PatternFill(start_color="5DBB63", end_color="5DBB63", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
     for i, district in enumerate(districts):
-        cell1 = new_sheet.cell(row, i * 2 + 1)
-        cell2 = new_sheet.cell(row, i * 2 + 2)
+        cell1 = new_sheet.cell(row, i * 3 + 1)
+        cell2 = new_sheet.cell(row, i * 3 + 2)
+        cell3 = new_sheet.cell(row, i * 3 + 3)
         cell1.value = district
         cell2.value = district
+        cell3.value = district
         cell1.fill = header_fill
         cell2.fill = header_fill
+        cell3.fill = header_fill
         cell1.font = header_font
         cell2.font = header_font
+        cell3.font = header_font
         cell1.alignment = Alignment(horizontal='center')
         cell2.alignment = Alignment(horizontal='center')
+        cell3.alignment = Alignment(horizontal='center')
 
-        sub_cell1 = new_sheet.cell(row + 1, i * 2 + 1)
-        sub_cell2 = new_sheet.cell(row + 1, i * 2 + 2)
+        sub_cell1 = new_sheet.cell(row + 1, i * 3 + 1)
+        sub_cell2 = new_sheet.cell(row + 1, i * 3 + 2)
+        sub_cell3 = new_sheet.cell(row + 1, i * 3 + 3)
         sub_cell1.value = "本週到會"
         sub_cell2.value = "未到會"
+        sub_cell3.value = "半年平均出勤率"
         sub_cell1.fill = subheader_fill
         sub_cell2.fill = subheader_fill
+        sub_cell3.fill = subheader_fill
         sub_cell1.font = header_font
         sub_cell2.font = header_font
+        sub_cell3.font = header_font
         sub_cell1.alignment = Alignment(horizontal='center')
         sub_cell2.alignment = Alignment(horizontal='center')
+        sub_cell3.alignment = Alignment(horizontal='center')
 
     max_len = max(max(len(attended.get(d, [])), len(not_attended.get(d, []))) for d in districts)
     for r in range(max_len):
@@ -136,9 +150,15 @@ def write_summary(new_sheet, attended, not_attended):
             attended_list = attended.get(district, [])
             not_attended_list = not_attended.get(district, [])
             if r < len(attended_list):
-                new_sheet.cell(r + 3, i * 2 + 1).value = attended_list[r]
+                name = attended_list[r]
+                new_sheet.cell(r + 3, i * 3 + 1).value = name
+                avg_rate = get_six_month_average(name, latest_date)
+                new_sheet.cell(r + 3, i * 3 + 3).value = f"{avg_rate:.2%}"
             if r < len(not_attended_list):
-                new_sheet.cell(r + 3, i * 2 + 2).value = not_attended_list[r]
+                name = not_attended_list[r]
+                new_sheet.cell(r + 3, i * 3 + 2).value = name
+                avg_rate = get_six_month_average(name, latest_date)
+                new_sheet.cell(r + 3, i * 3 + 3).value = f"{avg_rate:.2%}"
 
     logger.debug("Summary written successfully")
 
@@ -185,25 +205,31 @@ def process_excel(file_stream, file_extension):
     latest_districts = None
     latest_main_district = None
     latest_main_district_counts = None
+    all_names = set()
+
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
-        attended, not_attended, district_counts, main_district, main_district_counts = classify_attendance(input_sheet, col)
-        if main_district and not latest_main_district:
-            latest_main_district = main_district
-
-        if not any(attended.values()):
-            logger.info(f"No attendees for {week_name} in {month_prefix}, skipping sheet creation and data inclusion")
-            continue  # 跳過無人出席的週，不加入 all_attendance_data
-
-        # 提取年份並生成唯一的工作表名稱
         year = int(month_prefix.split("年")[0])
         month_part = month_prefix.split("年")[1]
         week_str = week_name.replace("第", "").replace("週", "")
         week_num = chinese_to_int(week_str)
         month_num = int(month_part.replace("月", ""))
         current_date = datetime(year, month_num, min(week_num * 7, 28))
-        new_sheet_name = f"{year}年{month_part}{week_name} 主日"
+        
+        attended, not_attended, district_counts, main_district, main_district_counts = classify_attendance(input_sheet, col, current_date)
+        if main_district and not latest_main_district:
+            latest_main_district = main_district
 
+        for district in attended:
+            all_names.update(attended[district])
+        for district in not_attended:
+            all_names.update(not_attended[district])
+
+        if not any(attended.values()):
+            logger.info(f"No attendees for {week_name} in {month_prefix}, skipping sheet creation and data inclusion")
+            continue
+
+        new_sheet_name = f"{year}年{month_part}{week_name} 主日"
         all_attendance_data.append((current_date, {'attended': attended, 'not_attended': not_attended}, f"{month_prefix}{week_name}"))
 
         if latest_date is None or current_date > latest_date:
@@ -220,12 +246,12 @@ def process_excel(file_stream, file_extension):
 
         new_sheet = workbook.create_sheet(new_sheet_name)
         logger.debug(f"Created new sheet: {new_sheet_name}")
-        write_summary(new_sheet, attended, not_attended)
+        write_summary(new_sheet, attended, not_attended, current_date)
 
     if not all_attendance_data:
         logger.warning("No weeks with attendees found in the file")
         return {
-            'output_stream': BytesIO(),  # 返回空的輸出流
+            'output_stream': BytesIO(),
             'latest_analytic_date': None,
             'latest_attendance_data': None,
             'latest_week_display': None,
@@ -234,6 +260,38 @@ def process_excel(file_stream, file_extension):
             'latest_main_district_counts': None,
             'all_attendance_data': []
         }
+
+    if latest_date:
+        six_months_ago = latest_date - timedelta(days=180)
+        current_week = six_months_ago
+        missing_records = []
+        
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        while current_week <= latest_date:
+            for name in all_names:
+                cursor.execute('''
+                    SELECT COUNT(*) FROM attendance_records
+                    WHERE name = ? AND date = ?
+                ''', (name, current_week.strftime('%Y-%m-%d')))
+                count = cursor.fetchone()[0]
+                
+                if count == 0:
+                    district = next((d for d in attended if name in attended[d]), None) or \
+                              next((d for d in not_attended if name in not_attended[d]), None) or "未知區"
+                    age_group = "未知"
+                    missing_records.append((name, current_week.strftime('%Y-%m-%d'), 0, district, age_group))
+            current_week += timedelta(days=7)
+        
+        if missing_records:
+            cursor.executemany('''
+                INSERT OR REPLACE INTO attendance_records (name, date, attended, district, age_group)
+                VALUES (?, ?, ?, ?, ?)
+            ''', missing_records)
+            conn.commit()
+        
+        conn.close()
 
     output_stream = BytesIO()
     workbook.save(output_stream)

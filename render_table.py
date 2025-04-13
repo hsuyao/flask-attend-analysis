@@ -1,13 +1,13 @@
 from config import logger
 from utils import chinese_to_int, parse_district
 
-def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, latest_district_counts, latest_main_district_counts):
-    # 獲取所有區域名稱
-    all_districts = set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys())
+def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, latest_district_counts, latest_main_district_counts, avg_attendance_rates=None):
+    if avg_attendance_rates is None:
+        avg_attendance_rates = {}
     
-    # 只保留具體子區（排除僅有大區的鍵）
+    all_districts = set(latest_attendance_data['attended'].keys()).union(latest_attendance_data['not_attended'].keys())
     districts = sorted(
-        [d for d in all_districts if len(parse_district(d)) > 1 and parse_district(d)[1]],  # 確保有子區資訊且子區非空
+        [d for d in all_districts if len(parse_district(d)) > 1 and parse_district(d)[1]],
         key=parse_district
     )
     
@@ -71,22 +71,20 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             sorted_attended[district] = attended_with_highlights
             sorted_not_attended[district] = not_attended_with_highlights
 
-        # 開始大區區塊
         html += f'<div class="district-section">\n'
         html += f'<h2>{main_district} - {week_display}</h2>\n'
         html += '<div class="district-container">\n'
 
-        # 出勤名單表
         html += '<div class="table-wrapper attendance-wrapper">\n<table class="excel-table">\n'
-        total_cols = len(sub_districts) * 2
+        total_cols = len(sub_districts) * 3
         html += f'<tr class="header"><th colspan="{total_cols}">{main_district}</th></tr>\n'
         html += '<tr class="district-row">\n'
         for district in sub_districts:
-            html += f'<th colspan="2">{district}</th>'
+            html += f'<th colspan="3">{district}</th>'
         html += '</tr>\n'
         html += '<tr class="subheader">\n'
         for _ in sub_districts:
-            html += '<th>本週到會</th><th>未到會</th>'
+            html += '<th>本週到會</th><th>未到會</th><th>半年平均出勤率</th>'
         html += '</tr>\n'
 
         for r in range(max_len):
@@ -101,11 +99,12 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                 not_attended_display = not_attended_info[1]
                 attended_class = attended_info[2]
                 not_attended_class = not_attended_info[2]
-                html += f'<td class="{attended_class}">{attended_display}</td><td class="{not_attended_class}">{not_attended_display}</td>'
+                name = attended_info[0] if attended_info[0] else not_attended_info[0]
+                avg_rate = avg_attendance_rates.get(name, 0.0)
+                html += f'<td class="{attended_class}">{attended_display}</td><td class="{not_attended_class}">{not_attended_display}</td><td>{avg_rate:.2%}</td>'
             html += '</tr>\n'
         html += '</table>\n</div>\n'
 
-        # 統計表（總計移至標題行並染色）
         stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=parse_district)
         sub_districts_stats = [d for d in stats_districts if d.startswith(main_district)]
         if sub_districts_stats:
@@ -113,7 +112,6 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             html += f'<tr class="header"><th colspan="2">{main_district} 統計</th></tr>\n'
             row_index = 0
             
-            # 子區統計
             for district in sub_districts_stats:
                 total = latest_district_counts[district]['total']
                 html += f'<tr class="total-row"><td style="padding-left: 15px;">{district}</td><td>{total}</td></tr>\n'
@@ -124,7 +122,6 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                     html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
                     row_index += 1
             
-            # 主區統計
             total = latest_main_district_counts[main_district]['total']
             html += f'<tr class="total-row"><td style="padding-left: 15px;">{main_district}</td><td>{total}</td></tr>\n'
             row_index += 1
