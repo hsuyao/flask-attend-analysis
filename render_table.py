@@ -21,17 +21,19 @@ def get_all_latest_attendance_dates(names, latest_date):
     return {name: results.get(name, datetime(1970, 1, 1)) for name in names}
 
 def render_stats_table(main_district, district_counts, main_district_counts):
-    """生成統計表 HTML（僅包含子區統計，移除主區統計）"""
+    """生成統計表 HTML，包含子區和大區統計"""
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     html = ""
 
     stats_districts = sorted([d for d in district_counts.keys() if d != '總計'], key=parse_district)
     sub_districts_stats = [d for d in stats_districts if d.startswith(main_district)]
-    if sub_districts_stats:
+
+    if sub_districts_stats or main_district in main_district_counts:
         html += '<div class="table-wrapper stats-wrapper flex-item">\n<table class="excel-table">\n'
         html += f'<tr class="header"><th colspan="2">{main_district} 統計</th></tr>\n'
         row_index = 0
-        
+
+        # 子區統計
         for district in sub_districts_stats:
             total = district_counts[district]['total']
             html += f'<tr class="total-row"><td style="padding-left: 15px;">{district}</td><td>{total}</td></tr>\n'
@@ -41,7 +43,18 @@ def render_stats_table(main_district, district_counts, main_district_counts):
                 row_class = "even" if row_index % 2 == 0 else "odd"
                 html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
                 row_index += 1
-        
+
+        # 大區統計
+        if main_district in main_district_counts:
+            total = main_district_counts[main_district]['total']
+            html += f'<tr class="total-row main-district-row"><td style="padding-left: 15px; font-weight: bold;">{main_district}</td><td>{total}</td></tr>\n'
+            row_index += 1
+            for age in age_categories:
+                count = main_district_counts[main_district]['ages'][age]
+                row_class = "even" if row_index % 2 == 0 else "odd"
+                html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
+                row_index += 1
+
         html += '</table>\n</div>\n'
 
     return html
