@@ -4,18 +4,21 @@ import sqlite3
 from datetime import datetime
 from database import DATABASE_PATH
 
-def get_latest_attendance_date(name, latest_date):
-    """獲取某人最近一次出勤的日期，若無記錄則返回遠古日期"""
+def get_all_latest_attendance_dates(names, latest_date):
+    """批量獲取多人的最近出勤日期，若無記錄則返回遠古日期"""
+    if not names:
+        return {}
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    cursor.execute('''
-        SELECT MAX(date) FROM attendance_records
-        WHERE name = ? AND attended = 1 AND date <= ?
-    ''', (name, latest_date.strftime('%Y-%m-%d')))
-    result = cursor.fetchone()[0]
+    placeholders = ','.join('?' for _ in names)
+    cursor.execute(f'''
+        SELECT name, MAX(date) FROM attendance_records
+        WHERE name IN ({placeholders}) AND attended = 1 AND date <= ?
+        GROUP BY name
+    ''', names + [latest_date.strftime('%Y-%m-%d')])
+    results = {row[0]: datetime.strptime(row[1], '%Y-%m-%d') if row[1] else datetime(1970, 1, 1) for row in cursor.fetchall()}
     conn.close()
-    # 若無出勤記錄，返回遠古日期
-    return datetime.strptime(result, '%Y-%m-%d') if result else datetime(1970, 1, 1)
+    return {name: results.get(name, datetime(1970, 1, 1)) for name in names}
 
 def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, latest_district_counts, latest_main_district_counts, avg_attendance_rates=None):
     if avg_attendance_rates is None:
@@ -73,7 +76,6 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                 prev_attended = previous_week_data['attended'].get(district, [])
                 prev_not_attended = previous_week_data['not_attended'].get(district, [])
                 
-                # 除錯：記錄前一週資料
                 logger.debug(f"地區: {district}, 前一週出勤: {prev_attended}, 前一週未出勤: {prev_not_attended}")
                 
                 for name in attended_list:
@@ -90,10 +92,13 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                                [(name, False, False) for name in not_attended_list]
                 logger.debug("無前一週資料，所有高亮狀態設為否")
             
-            # 按底色優先（有底色在前），再按最近出勤日期降序排序
-            combined_list.sort(key=lambda x: (-int(x[2]), get_latest_attendance_date(x[0], latest_date)), reverse=True)
+            # 批量查詢最近出勤日期
+            names = attended_list + not_attended_list
+            latest_dates = get_all_latest_attendance_dates(names, latest_date)
             
-            # 除錯：記錄排序後的 combined_list
+            # 按底色優先（有底色在前），再按最近出勤日期降序排序
+            combined_list.sort(key=lambda x: (-int(x[2]), latest_dates[x[0]]), reverse=True)
+            
             logger.debug(f"{district} 排序後的合併名單: {[(name, is_attended, has_highlight) for name, is_attended, has_highlight in combined_list]}")
             
             # 分列：將有底色的姓名放在最前
@@ -122,7 +127,6 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             attended_with_highlights = highlighted_attended + non_highlighted_attended
             not_attended_with_highlights = highlighted_not_attended + non_highlighted_not_attended
             
-            # 除錯：記錄分列後的結果
             logger.debug(f"{district} 出勤高亮名單: {attended_with_highlights}")
             logger.debug(f"{district} 未出勤高亮名單: {not_attended_with_highlights}")
             
