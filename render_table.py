@@ -55,7 +55,7 @@ def render_stats_table(main_district, district_counts, main_district_counts):
 
     return html
 
-def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, latest_district_counts, latest_main_district_counts, avg_attendance_rates=None):
+def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, district_counts, main_district_counts, avg_attendance_rates=None):
     if avg_attendance_rates is None:
         avg_attendance_rates = {}
     
@@ -170,9 +170,10 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
 
         html += f'<div class="district-section">\n'
         html += f'<h2>{main_district} - {week_display}</h2>\n'
-        html += '<div class="district-container">\n'
+        html += '<div class="district-container flex-container">\n'  # 使用 flex 容器實現水平佈局
 
-        html += '<div class="table-wrapper attendance-wrapper">\n<table class="excel-table">\n'
+        # 出勤表（左側）
+        html += '<div class="table-wrapper attendance-wrapper flex-item">\n<table class="excel-table">\n'
         total_cols = len(sub_districts) * 2
         html += f'<tr class="header"><th colspan="{total_cols}">{main_district}</th></tr>\n'
         html += '<tr class="district-row">\n'
@@ -200,8 +201,8 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             html += '</tr>\n'
         html += '</table>\n</div>\n'
 
-        # 將統計表生成邏輯移到獨立函數
-        html += render_stats_table(main_district, latest_district_counts, latest_main_district_counts)
+        # 統計表（右側）
+        html += render_stats_table(main_district, district_counts, main_district_counts)
 
         html += '</div>\n</div>\n'
 
