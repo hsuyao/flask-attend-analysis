@@ -124,8 +124,7 @@ def get_week_data(week_idx):
     
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
-            'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>',
-            'stats_table': ''
+            'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
         }), 400
     
     date, attendance_data, week_name = all_attendance_data[week_idx]
@@ -153,14 +152,8 @@ def get_week_data(week_idx):
         avg_attendance_rates
     )
     
-    # 生成統計表
-    stats_table_html = ""
-    if main_district and district_counts and main_district_counts:
-        stats_table_html = render_stats_table(main_district, district_counts, main_district_counts)
-    
     return jsonify({
-        'attendance_table': attendance_table_html,
-        'stats_table': stats_table_html
+        'attendance_table': attendance_table_html
     })
 
 def classify_attendance_for_week(week_data):

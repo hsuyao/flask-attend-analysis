@@ -1,4 +1,3 @@
-/* 假設已有基本樣式，這裡僅添加或調整 Flex 相關樣式 */
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -7,7 +6,7 @@ body {
 
 .table-container {
     width: 100%;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
 }
 
@@ -21,7 +20,7 @@ body {
 
 .flex-container {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: flex-start;
     gap: 20px;
 }
@@ -33,65 +32,104 @@ body {
 
 .table-wrapper {
     overflow-x: auto;
+    text-align: left;
+    min-width: 200px;
 }
 
 .attendance-wrapper {
-    flex: 2; /* 出勤表佔據更多空間 */
+    flex: 2;
+    max-height: 70vh;
+    overflow-y: auto;
+    overflow-x: auto;
+    min-width: 400px;
 }
 
 .stats-wrapper {
-    flex: 1; /* 統計表佔據較少空間 */
+    flex: 1;
+    max-height: 70vh;
+    overflow-y: auto;
+    min-width: 200px;
 }
 
 .excel-table {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 20px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
 }
 
 .excel-table th,
 .excel-table td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: center;
+    border: 1px solid #000;
+    padding: 2px;
+    text-align: left;
+    vertical-align: top;
+    min-width: 80px;
+    line-height: 1.2;
+    font-size: 14px;
 }
 
-.excel-table th {
-    background-color: #f2f2f2;
+.stats-wrapper .excel-table th,
+.stats-wrapper .excel-table td {
+    min-width: 60px;
+    padding-left: 10px;
+}
+
+.title-row th {
+    background-color: #1C2526;
+    color: white;
+    text-align: center;
+    font-weight: bold;
+    padding: 2px;
+    line-height: 1.2;
 }
 
 .header {
-    background-color: #e0e0e0;
+    background-color: #2F4F4F;
+    color: white;
     font-weight: bold;
+    padding: 2px;
+    line-height: 1.2;
 }
 
 .district-row th {
-    background-color: #f0f0f0;
+    background-color: #4682B4;
+    color: white;
+    text-align: center;
+    padding: 2px;
+    line-height: 1.2;
 }
 
 .subheader th {
-    background-color: #fafafa;
+    background-color: #5F9EA0;
+    color: white;
+    padding: 2px;
+    line-height: 1.2;
 }
 
 .even {
-    background-color: #f9f9f9;
+    background-color: #F3F2F1;
+    color: black;
 }
 
 .odd {
-    background-color: #ffffff;
+    background-color: #FFFFFF;
+    color: black;
 }
 
 .total-row {
-    background-color: #e6f3ff;
+    background-color: #B0E0E6;
+    color: black;
     font-weight: bold;
 }
 
 .highlight-green {
-    background-color: #ccffcc !important;
+    background-color: #90EE90 !important;
 }
 
 .highlight-red {
-    background-color: #ffcccc !important;
+    background-color: #FFB6C1 !important;
 }
 
 .week-selector-container {
@@ -102,23 +140,41 @@ body {
 .week-selector {
     padding: 5px;
     font-size: 16px;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
 }
 
 .button-container {
     text-align: center;
-    margin-top: 20px;
+    margin: 10px 0;
 }
 
 .button {
     display: inline-block;
-    padding: 10px 20px;
-    margin: 0 10px;
-    background-color: #007bff;
+    padding: 8px 16px;
+    margin: 10px 5px;
+    background-color: #1C2526;
     color: white;
     text-decoration: none;
-    border-radius: 5px;
+    border: none;
+    cursor: pointer;
 }
 
 .button:hover {
-    background-color: #0056b3;
+    background-color: #0F1414;
+}
+
+h2 {
+    text-align: center !important;
+    font-size: 20px;
+}
+
+.upload-form {
+    text-align: center;
+    margin: 20px 0;
+}
+
+.upload-input {
+    margin-right: 10px;
 }

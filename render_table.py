@@ -21,14 +21,14 @@ def get_all_latest_attendance_dates(names, latest_date):
     return {name: results.get(name, datetime(1970, 1, 1)) for name in names}
 
 def render_stats_table(main_district, district_counts, main_district_counts):
-    """生成統計表 HTML"""
+    """生成統計表 HTML（僅包含子區統計，移除主區統計）"""
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     html = ""
 
     stats_districts = sorted([d for d in district_counts.keys() if d != '總計'], key=parse_district)
     sub_districts_stats = [d for d in stats_districts if d.startswith(main_district)]
     if sub_districts_stats:
-        html += '<div class="table-wrapper stats-wrapper">\n<table class="excel-table">\n'
+        html += '<div class="table-wrapper stats-wrapper flex-item">\n<table class="excel-table">\n'
         html += f'<tr class="header"><th colspan="2">{main_district} 統計</th></tr>\n'
         row_index = 0
         
@@ -42,15 +42,6 @@ def render_stats_table(main_district, district_counts, main_district_counts):
                 html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
                 row_index += 1
         
-        total = main_district_counts[main_district]['total']
-        html += f'<tr class="total-row"><td style="padding-left: 15px;">{main_district}</td><td>{total}</td></tr>\n'
-        row_index += 1
-        for age in age_categories:
-            count = main_district_counts[main_district]['ages'][age]
-            row_class = "even" if row_index % 2 == 0 else "odd"
-            html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
-            row_index += 1
-
         html += '</table>\n</div>\n'
 
     return html
@@ -105,7 +96,6 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             attended_list = latest_attendance_data['attended'].get(district, [])
             not_attended_list = latest_attendance_data['not_attended'].get(district, [])
             
-            # 合併出勤與未出勤名單，記錄底色狀態
             combined_list = []
             if previous_week_data:
                 prev_attended = previous_week_data['attended'].get(district, [])
@@ -114,12 +104,12 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                 logger.debug(f"地區: {district}, 前一週出勤: {prev_attended}, 前一週未出勤: {prev_not_attended}")
                 
                 for name in attended_list:
-                    has_highlight = name in prev_not_attended  # 綠色底色：本週出勤，前一週未出勤
+                    has_highlight = name in prev_not_attended
                     combined_list.append((name, True, has_highlight))
                     logger.debug(f"姓名: {name}, 地區: {district}, 出勤: 是, 是否高亮: {has_highlight}")
                 
                 for name in not_attended_list:
-                    has_highlight = name in prev_attended  # 紅色底色：本週未出勤，前一週出勤
+                    has_highlight = name in prev_attended
                     combined_list.append((name, False, has_highlight))
                     logger.debug(f"姓名: {name}, 地區: {district}, 出勤: 否, 是否高亮: {has_highlight}")
             else:
@@ -127,16 +117,13 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                                [(name, False, False) for name in not_attended_list]
                 logger.debug("無前一週資料，所有高亮狀態設為否")
             
-            # 批量查詢最近出勤日期
             names = attended_list + not_attended_list
             latest_dates = get_all_latest_attendance_dates(names, latest_date)
             
-            # 按底色優先（有底色在前），再按最近出勤日期降序排序
             combined_list.sort(key=lambda x: (-int(x[2]), latest_dates[x[0]]), reverse=True)
             
             logger.debug(f"{district} 排序後的合併名單: {[(name, is_attended, has_highlight) for name, is_attended, has_highlight in combined_list]}")
             
-            # 分列：將有底色的姓名放在最前
             highlighted_attended = []
             highlighted_not_attended = []
             non_highlighted_attended = []
@@ -158,7 +145,6 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                     else:
                         non_highlighted_not_attended.append(entry)
             
-            # 合併：有底色的在前，無底色的在後
             attended_with_highlights = highlighted_attended + non_highlighted_attended
             not_attended_with_highlights = highlighted_not_attended + non_highlighted_not_attended
             
@@ -170,7 +156,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
 
         html += f'<div class="district-section">\n'
         html += f'<h2>{main_district} - {week_display}</h2>\n'
-        html += '<div class="district-container flex-container">\n'  # 使用 flex 容器實現水平佈局
+        html += '<div class="district-container flex-container">\n'
 
         # 出勤表（左側）
         html += '<div class="table-wrapper attendance-wrapper flex-item">\n<table class="excel-table">\n'
