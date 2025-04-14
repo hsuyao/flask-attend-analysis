@@ -14,9 +14,15 @@
                 success: function(response) {
                     if (response.attendance_table) {
                         $('#attendanceTable').html(response.attendance_table);
-                        console.log('表格更新成功');
+                        console.log('出勤表格更新成功');
                     } else {
                         console.error('回應中無 attendance_table:', response);
+                    }
+                    if (response.stats_table) {
+                        $('#statsTable').html(response.stats_table);
+                        console.log('統計表格更新成功');
+                    } else {
+                        console.error('回應中無 stats_table:', response);
                     }
                 },
                 error: function(xhr, status, error) {
@@ -44,6 +50,9 @@
         </div>
         <div id="attendanceTable">
             {{ attendance_table_html | safe }}
+        </div>
+        <div id="statsTable">
+            {{ stats_table_html | safe }}
         </div>
     </div>
     <div class="button-container">

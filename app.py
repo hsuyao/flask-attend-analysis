@@ -4,10 +4,12 @@ from io import BytesIO
 import uuid
 import os
 import traceback
+import sqlite3
 from config import logger
 from excel_handler import process_excel, generate_excel
-from render_table import render_attendance_table
-from database import init_database, get_six_month_average
+from render_table import render_attendance_table, render_stats_table
+from database import init_database, get_six_month_average, DATABASE_PATH
+from utils import parse_district  # 新增導入
 
 app = Flask(__name__)
 
@@ -109,8 +111,8 @@ def result():
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
-        stats_table_html="",
-        has_file_stream=True,  # 確保下載按鈕顯示
+        stats_table_html="",  # 初始時不渲染統計表，交由 AJAX 處理
+        has_file_stream=True,
         week_options=week_options,
         selected_week_idx=len(all_attendance_data) - 1 if all_attendance_data else 0,
         version=version
@@ -119,16 +121,21 @@ def result():
 @app.route('/get_week_data/<int:week_idx>')
 def get_week_data(week_idx):
     all_attendance_data = session.get('all_attendance_data', [])
-    latest_district_counts = session.get('latest_district_counts', {})
-    latest_main_district_counts = session.get('latest_main_district_counts', {})
     
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
-            'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
+            'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>',
+            'stats_table': ''
         }), 400
     
     date, attendance_data, week_name = all_attendance_data[week_idx]
     
+    # 計算對應週次的統計資料
+    latest_main_district = session.get('latest_main_district', '')
+    _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(all_attendance_data[week_idx])
+    if not main_district:
+        main_district = latest_main_district
+
     avg_attendance_rates = {}
     for district, names in attendance_data['attended'].items():
         for name in names:
@@ -141,16 +148,70 @@ def get_week_data(week_idx):
         week_name,
         attendance_data,
         all_attendance_data,
-        latest_district_counts,
-        latest_main_district_counts,
+        district_counts,
+        main_district_counts,
         avg_attendance_rates
     )
     
+    # 生成統計表
+    stats_table_html = ""
+    if main_district and district_counts and main_district_counts:
+        stats_table_html = render_stats_table(main_district, district_counts, main_district_counts)
+    
     return jsonify({
-        'attendance_table': attendance_table_html
+        'attendance_table': attendance_table_html,
+        'stats_table': stats_table_html
     })
 
-@app.route('/download', methods=['GET'])
+def classify_attendance_for_week(week_data):
+    """為特定週次重新計算出勤和統計資料"""
+    date, data, _ = week_data
+    attended = data['attended']
+    not_attended = data['not_attended']
+    
+    main_district = None
+    district_counts = {}
+    main_district_counts = {}
+    age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+    
+    # 從資料庫中獲取該週次所有人的年齡分組
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT district, name, age_group FROM attendance_records
+        WHERE date = ?
+    ''', (date.strftime('%Y-%m-%d'),))
+    records = cursor.fetchall()
+    conn.close()
+    
+    age_mapping = {(district, name): age_group for district, name, age_group in records}
+    
+    # 初始化統計結構
+    for district in set(attended.keys()).union(not_attended.keys()):
+        main_district_value = parse_district(district)[0]
+        if not main_district:
+            main_district = main_district_value
+        if district not in district_counts:
+            district_counts[district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
+        if main_district_value not in main_district_counts:
+            main_district_counts[main_district_value] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
+    
+    # 計算出勤統計
+    for district, names in attended.items():
+        main_district_value = parse_district(district)[0]
+        for name in names:
+            effective_age = age_mapping.get((district, name), '青職以上')
+            district_counts[district]['total'] += 1
+            main_district_counts[main_district_value]['total'] += 1
+            district_counts[district]['ages'][effective_age] += 1
+            main_district_counts[main_district_value]['ages'][effective_age] += 1
+    
+    total_attendance = sum(d['total'] for d in district_counts.values())
+    district_counts['總計'] = total_attendance
+    
+    return attended, district_counts, not_attended, main_district, main_district_counts
+
+@app.route('/download', methods=['GET]'])
 def download_file():
     all_attendance_data = session.get('all_attendance_data', [])
     if not all_attendance_data:

@@ -20,6 +20,41 @@ def get_all_latest_attendance_dates(names, latest_date):
     conn.close()
     return {name: results.get(name, datetime(1970, 1, 1)) for name in names}
 
+def render_stats_table(main_district, district_counts, main_district_counts):
+    """生成統計表 HTML"""
+    age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+    html = ""
+
+    stats_districts = sorted([d for d in district_counts.keys() if d != '總計'], key=parse_district)
+    sub_districts_stats = [d for d in stats_districts if d.startswith(main_district)]
+    if sub_districts_stats:
+        html += '<div class="table-wrapper stats-wrapper">\n<table class="excel-table">\n'
+        html += f'<tr class="header"><th colspan="2">{main_district} 統計</th></tr>\n'
+        row_index = 0
+        
+        for district in sub_districts_stats:
+            total = district_counts[district]['total']
+            html += f'<tr class="total-row"><td style="padding-left: 15px;">{district}</td><td>{total}</td></tr>\n'
+            row_index += 1
+            for age in age_categories:
+                count = district_counts[district]['ages'][age]
+                row_class = "even" if row_index % 2 == 0 else "odd"
+                html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
+                row_index += 1
+        
+        total = main_district_counts[main_district]['total']
+        html += f'<tr class="total-row"><td style="padding-left: 15px;">{main_district}</td><td>{total}</td></tr>\n'
+        row_index += 1
+        for age in age_categories:
+            count = main_district_counts[main_district]['ages'][age]
+            row_class = "even" if row_index % 2 == 0 else "odd"
+            html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
+            row_index += 1
+
+        html += '</table>\n</div>\n'
+
+    return html
+
 def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, latest_district_counts, latest_main_district_counts, avg_attendance_rates=None):
     if avg_attendance_rates is None:
         avg_attendance_rates = {}
@@ -165,33 +200,8 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             html += '</tr>\n'
         html += '</table>\n</div>\n'
 
-        stats_districts = sorted([d for d in latest_district_counts.keys() if d != '總計'], key=parse_district)
-        sub_districts_stats = [d for d in stats_districts if d.startswith(main_district)]
-        if sub_districts_stats:
-            html += '<div class="table-wrapper stats-wrapper">\n<table class="excel-table">\n'
-            html += f'<tr class="header"><th colspan="2">{main_district} 統計</th></tr>\n'
-            row_index = 0
-            
-            for district in sub_districts_stats:
-                total = latest_district_counts[district]['total']
-                html += f'<tr class="total-row"><td style="padding-left: 15px;">{district}</td><td>{total}</td></tr>\n'
-                row_index += 1
-                for age in age_categories:
-                    count = latest_district_counts[district]['ages'][age]
-                    row_class = "even" if row_index % 2 == 0 else "odd"
-                    html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
-                    row_index += 1
-            
-            total = latest_main_district_counts[main_district]['total']
-            html += f'<tr class="total-row"><td style="padding-left: 15px;">{main_district}</td><td>{total}</td></tr>\n'
-            row_index += 1
-            for age in age_categories:
-                count = latest_main_district_counts[main_district]['ages'][age]
-                row_class = "even" if row_index % 2 == 0 else "odd"
-                html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
-                row_index += 1
-
-            html += '</table>\n</div>\n'
+        # 將統計表生成邏輯移到獨立函數
+        html += render_stats_table(main_district, latest_district_counts, latest_main_district_counts)
 
         html += '</div>\n</div>\n'
 
