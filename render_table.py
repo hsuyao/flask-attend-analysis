@@ -1,5 +1,21 @@
 from config import logger
 from utils import chinese_to_int, parse_district
+import sqlite3
+from datetime import datetime
+from database import DATABASE_PATH
+
+def get_latest_attendance_date(name, latest_date):
+    """獲取某人最近一次出勤的日期，若無記錄則返回遠古日期"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT MAX(date) FROM attendance_records
+        WHERE name = ? AND attended = 1 AND date <= ?
+    ''', (name, latest_date.strftime('%Y-%m-%d')))
+    result = cursor.fetchone()[0]
+    conn.close()
+    # 若無出勤記錄，返回遠古日期
+    return datetime.strptime(result, '%Y-%m-%d') if result else datetime(1970, 1, 1)
 
 def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, latest_district_counts, latest_main_district_counts, avg_attendance_rates=None):
     if avg_attendance_rates is None:
@@ -26,6 +42,11 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
     
     if current_week_idx is not None and current_week_idx > 0:
         previous_week_data = all_attendance_data[current_week_idx - 1][1]
+        logger.debug(f"找到前一週資料，週次 {week_display}: {previous_week_data}")
+    else:
+        logger.warning(f"沒有前一週資料可用，週次: {week_display}。高亮顯示將被停用。")
+    
+    latest_date = all_attendance_data[-1][0] if all_attendance_data else datetime.now()
 
     main_districts = sorted(set(parse_district(d)[0] for d in districts), key=lambda x: chinese_to_int(x[0]))
     district_groups = {md: [d for d in districts if d.startswith(md)] for md in main_districts}
@@ -46,31 +67,64 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             attended_list = latest_attendance_data['attended'].get(district, [])
             not_attended_list = latest_attendance_data['not_attended'].get(district, [])
             
-            # 合并出勤和未出勤名单，按出勤率排序
-            combined_list = [(name, True) for name in attended_list] + [(name, False) for name in not_attended_list]
-            combined_list.sort(key=lambda x: avg_attendance_rates.get(x[0], 0.0), reverse=True)
-            
-            attended_with_highlights = []
-            not_attended_with_highlights = []
+            # 合併出勤與未出勤名單，記錄底色狀態
+            combined_list = []
             if previous_week_data:
                 prev_attended = previous_week_data['attended'].get(district, [])
                 prev_not_attended = previous_week_data['not_attended'].get(district, [])
                 
-                for name, is_attended in combined_list:
-                    display_name = name[:4] if len(name) > 4 else name
-                    if is_attended:
-                        highlight = 'highlight-green' if name in prev_not_attended else ''
-                        attended_with_highlights.append((name, display_name, highlight))
-                    else:
-                        highlight = 'highlight-red' if name in prev_attended else ''
-                        not_attended_with_highlights.append((name, display_name, highlight))
+                # 除錯：記錄前一週資料
+                logger.debug(f"地區: {district}, 前一週出勤: {prev_attended}, 前一週未出勤: {prev_not_attended}")
+                
+                for name in attended_list:
+                    has_highlight = name in prev_not_attended  # 綠色底色：本週出勤，前一週未出勤
+                    combined_list.append((name, True, has_highlight))
+                    logger.debug(f"姓名: {name}, 地區: {district}, 出勤: 是, 是否高亮: {has_highlight}")
+                
+                for name in not_attended_list:
+                    has_highlight = name in prev_attended  # 紅色底色：本週未出勤，前一週出勤
+                    combined_list.append((name, False, has_highlight))
+                    logger.debug(f"姓名: {name}, 地區: {district}, 出勤: 否, 是否高亮: {has_highlight}")
             else:
-                for name, is_attended in combined_list:
-                    display_name = name[:4] if len(name) > 4 else name
+                combined_list = [(name, True, False) for name in attended_list] + \
+                               [(name, False, False) for name in not_attended_list]
+                logger.debug("無前一週資料，所有高亮狀態設為否")
+            
+            # 按底色優先（有底色在前），再按最近出勤日期降序排序
+            combined_list.sort(key=lambda x: (-int(x[2]), get_latest_attendance_date(x[0], latest_date)), reverse=True)
+            
+            # 除錯：記錄排序後的 combined_list
+            logger.debug(f"{district} 排序後的合併名單: {[(name, is_attended, has_highlight) for name, is_attended, has_highlight in combined_list]}")
+            
+            # 分列：將有底色的姓名放在最前
+            highlighted_attended = []
+            highlighted_not_attended = []
+            non_highlighted_attended = []
+            non_highlighted_not_attended = []
+            
+            for name, is_attended, has_highlight in combined_list:
+                display_name = name[:4] if len(name) > 4 else name
+                highlight_class = 'highlight-green' if is_attended and has_highlight else \
+                                'highlight-red' if not is_attended and has_highlight else ''
+                entry = (name, display_name, highlight_class)
+                if has_highlight:
                     if is_attended:
-                        attended_with_highlights.append((name, display_name, ''))
+                        highlighted_attended.append(entry)
                     else:
-                        not_attended_with_highlights.append((name, display_name, ''))
+                        highlighted_not_attended.append(entry)
+                else:
+                    if is_attended:
+                        non_highlighted_attended.append(entry)
+                    else:
+                        non_highlighted_not_attended.append(entry)
+            
+            # 合併：有底色的在前，無底色的在後
+            attended_with_highlights = highlighted_attended + non_highlighted_attended
+            not_attended_with_highlights = highlighted_not_attended + non_highlighted_not_attended
+            
+            # 除錯：記錄分列後的結果
+            logger.debug(f"{district} 出勤高亮名單: {attended_with_highlights}")
+            logger.debug(f"{district} 未出勤高亮名單: {not_attended_with_highlights}")
             
             sorted_attended[district] = attended_with_highlights
             sorted_not_attended[district] = not_attended_with_highlights
@@ -80,7 +134,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         html += '<div class="district-container">\n'
 
         html += '<div class="table-wrapper attendance-wrapper">\n<table class="excel-table">\n'
-        total_cols = len(sub_districts) * 2  # 移除出勤率列，每区 2 列
+        total_cols = len(sub_districts) * 2
         html += f'<tr class="header"><th colspan="{total_cols}">{main_district}</th></tr>\n'
         html += '<tr class="district-row">\n'
         for district in sub_districts:
@@ -141,7 +195,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         html = """
         <div class="district-section">
             <table class="excel-table">
-                <tr class="title-row"><th>該週無有效數據</th></tr>
+                <tr class="title-row"><th>該週無有效資料</th></tr>
             </table>
         </div>
         """
