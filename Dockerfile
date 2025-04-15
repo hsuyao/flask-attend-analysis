@@ -22,7 +22,7 @@ RUN pip install --upgrade pip && \
 COPY . .
 
 # 在构建时获取 commit ID 和日期，写入 version_info.txt
-RUN echo "echo '$(date -u +%Y%m%d)" > /app/version_info.txt
+RUN echo "$(git rev-parse HEAD 2>/dev/null || echo 'Unknown')-$(date -u +%Y%m%d)" > /app/version_info.txt || echo "Unknown-Unknown" > /app/version_info.txt
 
 # Create directories for session storage and database
 RUN mkdir -p /app/sessions /app/db
