@@ -41,7 +41,7 @@ body {
 }
 
 .stats-wrapper {
-    width: 150px; /* 固定统计表格宽度，100px + 50px */
+    width: 160px; /* 固定统计表格宽度，100px + 50px */
     flex: none; /* 移除 Flex 缩放 */
 }
 
@@ -57,7 +57,7 @@ body {
 }
 
 .stats-wrapper .excel-table {
-    width: 150px; /* 确保表格宽度固定 */
+    width: 160px; /* 确保表格宽度固定 */
 }
 
 .excel-table th,
@@ -77,12 +77,12 @@ body {
 
 .stats-wrapper .excel-table th:first-child,
 .stats-wrapper .excel-table td:first-child {
-    width: 100px; /* 第一列（区名/年龄）固定 80px */
+    width: 120px; /* 第一列（区名/年龄）固定 100px */
 }
 
 .stats-wrapper .excel-table th:nth-child(2),
 .stats-wrapper .excel-table td:nth-child(2) {
-    width: 50px; /* 第二列（人数）固定 50px */
+    width: 40px; /* 第二列（人数）固定 40px */
 }
 
 .title-row th {
