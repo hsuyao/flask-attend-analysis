@@ -21,42 +21,53 @@ def get_all_latest_attendance_dates(names, latest_date):
     return {name: results.get(name, datetime(1970, 1, 1)) for name in names}
 
 def render_stats_table(main_district, district_counts, main_district_counts):
-    """生成統計表 HTML，包含子區和大區統計"""
+    """生成统计表 HTML，按年龄组横向排列大区和子区人数"""
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     html = ""
 
-    stats_districts = sorted([d for d in district_counts.keys() if d != '總計'], key=parse_district)
-    sub_districts_stats = [d for d in stats_districts if d.startswith(main_district)]
+    # 获取子区列表，按 parse_district 排序
+    stats_districts = sorted(
+        [d for d in district_counts.keys() if d != '總計'],
+        key=parse_district
+    )
+    sub_districts = [d for d in stats_districts if d.startswith(main_district)]
 
-    if sub_districts_stats or main_district in main_district_counts:
-        html += '<div class="table-wrapper stats-wrapper flex-item">\n<table class="excel-table">\n'
-        html += f'<tr class="header"><th colspan="2">{main_district} 統計</th></tr>\n'
-        row_index = 0
+    if not sub_districts and main_district not in main_district_counts:
+        return '<div class="table-wrapper stats-wrapper flex-item"><p>無統計資料</p></div>'
 
-        # 子區統計
-        for district in sub_districts_stats:
-            total = district_counts[district]['total']
-            html += f'<tr class="total-row"><td style="padding-left: 15px;">{district}</td><td>{total}</td></tr>\n'
-            row_index += 1
-            for age in age_categories:
-                count = district_counts[district]['ages'][age]
-                row_class = "even" if row_index % 2 == 0 else "odd"
-                html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
-                row_index += 1
+    html += '<div class="table-wrapper stats-wrapper flex-item">\n'
+    html += f'<table class="excel-table">\n'
+    html += f'<tr class="header"><th>{main_district} 統計</th>'
 
-        # 大區統計
-        if main_district in main_district_counts:
-            total = main_district_counts[main_district]['total']
-            html += f'<tr class="total-row main-district-row"><td style="padding-left: 15px; font-weight: bold;">{main_district}</td><td>{total}</td></tr>\n'
-            row_index += 1
-            for age in age_categories:
-                count = main_district_counts[main_district]['ages'][age]
-                row_class = "even" if row_index % 2 == 0 else "odd"
-                html += f'<tr class="{row_class}"><td style="padding-left: 30px;">{age}</td><td>{count}</td></tr>\n'
-                row_index += 1
+    # 第一行：大区和子区名称
+    districts = [main_district] + sub_districts
+    for district in districts:
+        html += f'<th>{district}</th>'
+    html += '</tr>\n'
 
-        html += '</table>\n</div>\n'
+    # 数据行：年龄组
+    for age in age_categories:
+        row_class = "even" if age_categories.index(age) % 2 == 0 else "odd"
+        html += f'<tr class="{row_class}"><td>{age}</td>'
+        for district in districts:
+            if district == main_district:
+                count = main_district_counts.get(district, {'ages': {age: 0}}).get('ages', {age: 0}).get(age, 0)
+            else:
+                count = district_counts.get(district, {'ages': {age: 0}}).get('ages', {age: 0}).get(age, 0)
+            html += f'<td>{count}</td>'
+        html += '</tr>\n'
 
+    # 总计行
+    html += '<tr class="total-row"><td>總計</td>'
+    for district in districts:
+        if district == main_district:
+            total = main_district_counts.get(district, {'total': 0}).get('total', 0)
+        else:
+            total = district_counts.get(district, {'total': 0}).get('total', 0)
+        html += f'<td>{total}</td>'
+    html += '</tr>\n'
+
+    html += '</table>\n</div>\n'
     return html
 
 def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, district_counts, main_district_counts, avg_attendance_rates=None):
