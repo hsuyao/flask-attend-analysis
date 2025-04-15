@@ -9,7 +9,7 @@ from config import logger
 from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table, render_stats_table
 from database import init_database, get_six_month_average, DATABASE_PATH
-from utils import parse_district  # 新增導入
+from utils import parse_district
 
 app = Flask(__name__)
 
@@ -204,20 +204,32 @@ def classify_attendance_for_week(week_data):
     
     return attended, district_counts, not_attended, main_district, main_district_counts
 
-@app.route('/download', methods=['GET]'])
+@app.route('/download', methods=['GET'])
 def download_file():
+    logger.info("收到下载请求")
+    if request.method != 'GET':
+        logger.error(f"不支持的请求方法: {request.method}")
+        return jsonify({"error": f"方法不允許: {request.method}"}), 405
+    
     all_attendance_data = session.get('all_attendance_data', [])
     if not all_attendance_data:
+        logger.warning("下载请求失败：session 中无出勤数据")
         return jsonify({"error": "無可用的處理檔案"}), 404
     
-    file_stream = generate_excel(all_attendance_data)
-    file_stream.seek(0)
-    return send_file(
-        file_stream,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=f"analyzed_{uuid.uuid4().hex}.xlsx"
-    )
+    try:
+        file_stream = generate_excel(all_attendance_data)
+        file_stream.seek(0)
+        download_name = f"analyzed_{uuid.uuid4().hex}.xlsx"
+        logger.info(f"成功生成下载文件: {download_name}")
+        return send_file(
+            file_stream,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=download_name
+        )
+    except Exception as e:
+        logger.error(f"生成 Excel 文件失败: {str(e)}")
+        return jsonify({"error": f"下載失敗: {str(e)}"}), 500
 
 if __name__ == '__main__':
     init_database()
