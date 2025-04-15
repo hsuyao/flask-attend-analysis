@@ -2,11 +2,12 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 20px;
+    box-sizing: border-box;
 }
 
 .table-container {
     width: 100%;
-    max-width: 1400px;
+    max-width: 618px; /* 匹配固定容器宽度 */
     margin: 0 auto;
 }
 
@@ -20,43 +21,43 @@ body {
 
 .flex-container {
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
+    flex-wrap: nowrap; /* 防止换行 */
+    width: 618px; /* 468px 出勤 + 130px 统计 + 20px 间距 */
+    margin: 0 auto;
     gap: 20px;
-}
-
-.flex-item {
-    flex: 1;
-    min-width: 0;
+    justify-content: center;
 }
 
 .table-wrapper {
-    overflow-x: auto;
     text-align: left;
-    min-width: 200px;
 }
 
 .attendance-wrapper {
-    flex: 2;
-    max-height: 70vh;
-    overflow-y: auto;
-    overflow-x: auto;
-    min-width: 400px;
+    width: 468px; /* 固定出勤表格宽度，6 列 × 78px */
+    max-height: 70vh; /* 限制高度以启用垂直滚动 */
+    flex: none; /* 移除 Flex 缩放 */
+    overflow-x: auto; /* 水平滚动条 */
+    overflow-y: auto; /* 垂直滚动条 */
 }
 
 .stats-wrapper {
-    width: 300px; /* 固定寬度 */
-    max-height: 70vh;
-    overflow-y: auto;
-    flex: none; /* 移除 Flex 縮放 */
+    width: 150px; /* 固定统计表格宽度，100px + 50px */
+    flex: none; /* 移除 Flex 缩放 */
 }
 
 .excel-table {
-    width: 100%;
     border-collapse: collapse;
     margin-bottom: 20px;
     font-family: Arial, sans-serif;
     font-size: 14px;
+}
+
+.attendance-wrapper .excel-table {
+    width: 468px; /* 确保表格宽度固定 */
+}
+
+.stats-wrapper .excel-table {
+    width: 150px; /* 确保表格宽度固定 */
 }
 
 .excel-table th,
@@ -65,15 +66,23 @@ body {
     padding: 2px;
     text-align: left;
     vertical-align: top;
-    min-width: 80px;
     line-height: 1.2;
     font-size: 14px;
 }
 
-.stats-wrapper .excel-table th,
-.stats-wrapper .excel-table td {
-    width: 150px; /* 固定列寬，每列 150px */
-    padding-left: 10px;
+.attendance-wrapper .excel-table th,
+.attendance-wrapper .excel-table td {
+    width: 78px; /* 每列固定 78px，对齐“二大區一區” */
+}
+
+.stats-wrapper .excel-table th:first-child,
+.stats-wrapper .excel-table td:first-child {
+    width: 100px; /* 第一列（区名/年龄）固定 80px */
+}
+
+.stats-wrapper .excel-table th:nth-child(2),
+.stats-wrapper .excel-table td:nth-child(2) {
+    width: 50px; /* 第二列（人数）固定 50px */
 }
 
 .title-row th {
@@ -125,7 +134,7 @@ body {
 }
 
 .main-district-row {
-    background-color: #ADD8E6; /* 大區行使用稍深的背景色 */
+    background-color: #ADD8E6; /* 大区行使用稍深的背景色 */
     font-weight: bold;
 }
 
