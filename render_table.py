@@ -37,7 +37,8 @@ def render_stats_table(main_district, district_counts, main_district_counts):
 
     html += '<div class="table-wrapper stats-wrapper flex-item">\n'
     html += f'<table class="excel-table">\n'
-    html += f'<tr class="header"><th>{main_district} 統計</th>'
+    html += f'<tr class="header"><th></th>'
+
 
     # 第一行：大区和子区名称
     districts = [main_district] + sub_districts
