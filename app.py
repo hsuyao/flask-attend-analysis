@@ -3,17 +3,29 @@ from flask_session import Session
 from io import BytesIO
 import uuid
 import os
-from config import logger, db, COLLECTION_NAME, DB_TYPE
-from excel_handler import process_excel, generate_excel
+from celery import Celery
+from config import db, COLLECTION_NAME, DB_TYPE
+from excel_handler import process_excel
 from render_table import render_attendance_table
 from database import init_database, get_six_month_averages
 from utils import parse_district
 from datetime import datetime
+import logging
 
 app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
+app.config['CELERY_BROKER_URL'] = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+app.config['CELERY_RESULT_BACKEND'] = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 Session(app)
+
+# Configure Celery
+celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
+celery.conf.update(app.config)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def get_version_info():
     try:
@@ -21,6 +33,24 @@ def get_version_info():
             return f.read().strip()
     except Exception:
         return "Unknown-Unknown"
+
+@celery.task(bind=True)
+def process_excel_task(self, file_content, file_extension):
+    """Background task to process Excel file"""
+    logger.info("Starting Excel processing task")
+    buffered_stream = BytesIO(file_content)
+    try:
+        self.update_state(state='PROGRESS', meta={'stage': 'Parsing Excel', 'progress': 20})
+        result = process_excel(buffered_stream, file_extension)
+        self.update_state(state='PROGRESS', meta={'stage': 'Writing to database', 'progress': 60})
+        # Database writing is handled within process_excel
+        self.update_state(state='PROGRESS', meta={'stage': 'Finalizing', 'progress': 90})
+        logger.info("Excel processing task completed successfully")
+        return result
+    except Exception as e:
+        logger.error(f"Task failed: {str(e)}")
+        self.update_state(state='FAILURE', meta={'stage': 'Error', 'error': str(e)})
+        raise
 
 @app.route('/')
 def index():
@@ -41,23 +71,31 @@ def upload_file():
         return jsonify({"error": "Only .xls and .xlsx files supported"}), 400
 
     file_extension = '.xls' if filename.endswith('.xls') else '.xlsx'
+    file_content = file.stream.read()
 
     try:
-        result = process_excel(file.stream, file_extension)
-        if not result['all_attendance_data']:
-            return render_template('index.html', error="No attendance records found", version=get_version_info())
-
-        session['latest_analytic_date'] = result['latest_analytic_date']
-        session['latest_attendance_data'] = result['latest_attendance_data']
-        session['latest_week_display'] = result['latest_week_display']
-        session['latest_district_counts'] = result['latest_district_counts']
-        session['latest_main_district'] = result['latest_main_district']
-        session['latest_main_district_counts'] = result['latest_main_district_counts']
-        session['all_attendance_data'] = result['all_attendance_data']
-        return redirect(url_for('result'))
+        task = process_excel_task.apply_async(args=[file_content, file_extension])
+        logger.info(f"Started Celery task: {task.id}")
+        return jsonify({"task_id": task.id}), 202
     except Exception as e:
-        logger.error(f"Processing error: {str(e)}")
-        return jsonify({"error": f"Processing failed: {str(e)}"}), 500
+        logger.error(f"Failed to start task: {str(e)}")
+        return jsonify({"error": f"Task initiation failed: {str(e)}"}), 500
+
+@app.route('/task_status/<task_id>')
+def task_status(task_id):
+    task = process_excel_task.AsyncResult(task_id)
+    if task.state == 'PENDING':
+        response = {'state': task.state, 'stage': 'Waiting', 'progress': 0}
+    elif task.state == 'PROGRESS':
+        response = {'state': task.state, 'stage': task.info.get('stage', 'Processing'), 'progress': task.info.get('progress', 0)}
+    elif task.state == 'SUCCESS':
+        response = {'state': task.state, 'stage': 'Completed', 'progress': 100, 'result': task.get()}
+    elif task.state == 'FAILURE':
+        response = {'state': task.state, 'stage': 'Failed', 'progress': 0, 'error': task.info.get('error', 'Unknown error')}
+    else:
+        response = {'state': task.state, 'stage': 'Unknown', 'progress': 0}
+    logger.debug(f"Task status: {task_id} - {response}")
+    return jsonify(response)
 
 @app.route('/result')
 def result():
@@ -73,7 +111,6 @@ def result():
     all_attendance_data.sort(key=lambda x: x[0])
     latest_date = all_attendance_data[-1][0]
 
-    # Cache attendance rates
     all_names = set()
     for district in latest_attendance_data['attended']:
         all_names.update(latest_attendance_data['attended'][district])
@@ -141,10 +178,7 @@ def classify_attendance_for_week(week_data):
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
 
     if DB_TYPE == "mongodb":
-        records = db[COLLECTION_NAME].find(
-            {"date": date.strftime('%Y-%m-%d')},
-            hint="name_date_attended_idx"
-        )
+        records = db[COLLECTION_NAME].find({"date": date.strftime('%Y-%m-%d')})
         age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
     elif DB_TYPE == "sqlite":
         cursor = db.cursor()

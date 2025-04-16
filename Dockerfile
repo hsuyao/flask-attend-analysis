@@ -3,7 +3,7 @@ FROM python:3.8-slim
 
 # Install LibreOffice for soffice
 RUN apt-get update && \
-    apt-get install -y libreoffice && \
+    apt-get install -y libreoffice redis-server && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

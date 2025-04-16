@@ -5,10 +5,13 @@ from io import BytesIO
 from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
-from config import logger, START_COLUMN, DB_TYPE
+from config import START_COLUMN, DB_TYPE
 from utils import chinese_to_int, parse_district
 from database import get_six_month_averages, bulk_write, find_existing, get_all_latest_attendance_dates
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 def convert_xls_to_xlsx(file_stream):
     logger.info("Converting .xls to .xlsx using soffice")
@@ -211,7 +214,8 @@ def process_excel(file_stream, file_extension):
     latest_main_district_counts = None
     all_records = []
     all_names = set()
-    date_cache = {}  # Cache for latest attendance dates
+    date_cache = {}
+    existing_cache = set()
 
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
@@ -221,6 +225,8 @@ def process_excel(file_stream, file_extension):
         current_date = datetime(year, month_num, min(week_num * 7, 28))
 
         attended, not_attended, district_counts, main_district, main_district_counts, records = classify_attendance(input_sheet, col, current_date)
+        # Filter out existing records in memory
+        records = [r for r in records if (r["name"], r["date"]) not in existing_cache]
         all_records.extend(records)
         if main_district and not latest_main_district:
             latest_main_district = main_district
@@ -249,10 +255,11 @@ def process_excel(file_stream, file_extension):
         min_date = min(r["date"] for r in all_records)
         max_date = max(r["date"] for r in all_records)
         existing_keys = find_existing(min_date, max_date, all_names)
+        existing_cache.update(existing_keys)
         
-        # Only include new or changed records
-        new_records = [r for r in all_records if (r["name"], r["date"]) not in existing_keys]
+        new_records = [r for r in all_records if (r["name"], r["date"]) not in existing_cache]
         if new_records:
+            logger.info(f"Writing {len(new_records)} new records")
             bulk_write(new_records)
 
     # Supplement missing records for the latest week only
@@ -260,10 +267,11 @@ def process_excel(file_stream, file_extension):
         supplement_start = time.time()
         latest_week_str = latest_date.strftime("%Y-%m-%d")
         existing_keys = find_existing(latest_week_str, latest_week_str, all_names)
+        existing_cache.update(existing_keys)
 
         missing_records = []
         for name in all_names:
-            if (name, latest_week_str) not in existing_keys:
+            if (name, latest_week_str) not in existing_cache:
                 district = next((d for d in attended if name in attended.get(d, [])), None) or \
                           next((d for d in not_attended if name in not_attended.get(d, [])), None) or "未知區"
                 missing_records.append({
@@ -275,6 +283,7 @@ def process_excel(file_stream, file_extension):
                 })
 
         if missing_records:
+            logger.info(f"Writing {len(missing_records)} missing records")
             bulk_write(missing_records)
             logger.info(f"Bulk wrote {len(missing_records)} missing records for {latest_week_str}")
 

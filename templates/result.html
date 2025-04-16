@@ -4,7 +4,44 @@
     <meta charset="UTF-8">
     <title>出勤結果</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h2>出勤結果</h2>
+        <p class="instruction">
+            以下是出勤統計結果，您可以：<br>
+            - 選擇不同週次查看數據<br>
+            - 下載處理後的 Excel 檔案<br>
+            - 返回上傳頁面重新處理
+        </p>
+        <div class="table-container">
+            <div class="week-selector-container">
+                <select id="weekSelector" class="week-selector">
+                    {% for week_name, idx in week_options %}
+                        <option value="{{ idx }}" {% if idx == selected_week_idx %}selected{% endif %}>
+                            {{ week_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="attendanceTable">
+                {{ attendance_table_html | safe }}
+            </div>
+        </div>
+        <div class="button-container">
+            {% if has_file_stream %}
+                <a href="{{ url_for('download_file') }}" class="button">下載處理後的檔案</a>
+            {% endif %}
+            <a href="{{ url_for('index') }}" class="button">返回上傳頁面</a>
+        </div>
+    </div>
+    <footer style="text-align: center; margin-top: 20px;">
+        <p>版本: {{ version }}</p>
+    </footer>
+
     <script>
         function updateTable() {
             var weekIdx = document.getElementById('weekSelector').value;
@@ -27,33 +64,18 @@
 
         $(document).ready(function() {
             $('#weekSelector').on('change', updateTable);
-            updateTable();
+            // Load task result from sessionStorage
+            const taskResult = sessionStorage.getItem('taskResult');
+            if (taskResult) {
+                const result = JSON.parse(taskResult);
+                // Store result in session
+                {% for key in ['latest_analytic_date', 'latest_attendance_data', 'latest_week_display', 'latest_district_counts', 'latest_main_district', 'latest_main_district_counts', 'all_attendance_data'] %}
+                    sessionStorage.setItem('{{ key }}', JSON.stringify(result['{{ key }}']));
+                {% endfor %}
+                sessionStorage.removeItem('taskResult');
+                updateTable();
+            }
         });
     </script>
-</head>
-<body>
-    <div class="table-container">
-        <div class="week-selector-container">
-            <select id="weekSelector" class="week-selector">
-                {% for week_name, idx in week_options %}
-                    <option value="{{ idx }}" {% if idx == selected_week_idx %}selected{% endif %}>
-                        {{ week_name }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-        <div id="attendanceTable">
-            {{ attendance_table_html | safe }}
-        </div>
-    </div>
-    <div class="button-container">
-        {% if has_file_stream %}
-            <a href="{{ url_for('download_file') }}" class="button">下載處理後的檔案</a>
-        {% endif %}
-        <a href="{{ url_for('index') }}" class="button">返回上傳頁面</a>
-    </div>
-    <footer style="text-align: center; margin-top: 20px;">
-        <p>版本: {{ version }}</p>
-    </footer>
 </body>
 </html>

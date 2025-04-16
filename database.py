@@ -1,22 +1,23 @@
-from config import db, COLLECTION_NAME, logger, DB_TYPE
+from config import db, COLLECTION_NAME, DB_TYPE
 from datetime import datetime, timedelta
-from pymongo import IndexModel, ASCENDING, UpdateOne
 import time
 import sqlite3
+import logging
+
+logger = logging.getLogger(__name__)
 
 def init_database():
     """Initialize database (create table/collection and indexes)"""
     try:
         if DB_TYPE == "mongodb":
-            # MongoDB: Create indexes
             indexes = [
-                IndexModel([("name", ASCENDING), ("date", ASCENDING), ("attended", ASCENDING)], name="name_date_attended_idx"),
-                IndexModel([("date", ASCENDING), ("name", ASCENDING)], name="date_name_idx")
+                {"key": {"name": 1, "date": 1}, "unique": True, "name": "name_date_idx"},
+                {"key": {"date": 1, "name": 1}, "name": "date_name_idx"}
             ]
-            db[COLLECTION_NAME].create_indexes(indexes)
+            for index in indexes:
+                db[COLLECTION_NAME].create_index(**index)
             logger.info("Initialized MongoDB with indexes for attendance_records")
         elif DB_TYPE == "sqlite":
-            # SQLite: Create table and indexes
             cursor = db.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS attendance_records (
@@ -68,7 +69,7 @@ def get_six_month_averages(names, latest_date):
                         "attendance_rate": {"$ifNull": ["$attendance_rate", 0.0]}
                     }}
                 ]
-                cursor = db[COLLECTION_NAME].aggregate(pipeline, hint="name_date_attended_idx")
+                cursor = db[COLLECTION_NAME].aggregate(pipeline)
                 for doc in cursor:
                     result[doc["_id"]] = doc["attendance_rate"]
             except Exception as e:
@@ -82,7 +83,6 @@ def get_six_month_averages(names, latest_date):
                 WHERE name IN ({}) AND date >= ? AND date <= ?
                 GROUP BY name
             """
-            # Prepare placeholders for names
             placeholders = ",".join("?" for _ in names)
             cursor.execute(query.format(placeholders), names + [six_months_ago, latest_date_str])
             for row in cursor.fetchall():
@@ -90,7 +90,6 @@ def get_six_month_averages(names, latest_date):
         except Exception as e:
             logger.error(f"Failed to get averages for SQLite: {str(e)}")
 
-    # Fill missing names with 0.0
     for name in names:
         if name not in result:
             result[name] = 0.0
@@ -106,17 +105,21 @@ def bulk_write(records):
     start_time = time.time()
     try:
         if DB_TYPE == "mongodb":
-            bulk_ops = [
-                UpdateOne(
-                    {"name": r["name"], "date": r["date"]},
-                    {"$set": r},
-                    upsert=True
-                ) for r in records
-            ]
-            for i in range(0, len(bulk_ops), 5000):
-                batch = bulk_ops[i:i + 500]
-                db[COLLECTION_NAME].bulk_write(batch, ordered=False)
-                logger.info(f"Bulk wrote {len(batch)} MongoDB records")
+            batch_size = 5000
+            for i in range(0, len(records), batch_size):
+                batch = records[i:i + batch_size]
+                try:
+                    db[COLLECTION_NAME].insert_many(batch, ordered=False)
+                    logger.info(f"Inserted {len(batch)} MongoDB records")
+                except Exception as e:
+                    logger.warning(f"Insert failed for batch {i//batch_size + 1}: {str(e)}")
+                    for r in batch:
+                        db[COLLECTION_NAME].update_one(
+                            {"name": r["name"], "date": r["date"]},
+                            {"$set": r},
+                            upsert=True
+                        )
+                    logger.info(f"Upserted {len(batch)} MongoDB records")
         elif DB_TYPE == "sqlite":
             cursor = db.cursor()
             query = """
@@ -146,8 +149,7 @@ def find_existing(min_date, max_date, names):
                     "date": {"$gte": min_date, "$lte": max_date},
                     "name": {"$in": list(names)}
                 },
-                {"name": 1, "date": 1, "_id": 0},
-                hint="date_name_idx"
+                {"name": 1, "date": 1, "_id": 0}
             )
             existing_keys = set((doc["name"], doc["date"]) for doc in cursor)
         elif DB_TYPE == "sqlite":
@@ -195,7 +197,7 @@ def get_all_latest_attendance_dates(names, latest_date, cache=None):
                     "max_date": {"$first": "$date"}
                 }}
             ]
-            results = db[COLLECTION_NAME].aggregate(pipeline, hint="name_date_attended_idx")
+            results = db[COLLECTION_NAME].aggregate(pipeline)
             for doc in results:
                 if doc["max_date"]:
                     date = datetime.strptime(doc["max_date"], '%Y-%m-%d')
