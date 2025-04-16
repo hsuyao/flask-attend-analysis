@@ -3,7 +3,7 @@ from flask_session import Session
 from io import BytesIO
 import uuid
 import os
-from config import logger, db, COLLECTION_NAME
+from config import logger, db, COLLECTION_NAME, DB_TYPE
 from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table
 from database import init_database, get_six_month_averages
@@ -140,8 +140,24 @@ def classify_attendance_for_week(week_data):
     main_district_counts = {}
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
 
-    records = db[COLLECTION_NAME].find({"date": date.strftime('%Y-%m-%d')}, hint="date_name_attended_idx")
-    age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
+    if DB_TYPE == "mongodb":
+        records = db[COLLECTION_NAME].find(
+            {"date": date.strftime('%Y-%m-%d')},
+            hint="name_date_attended_idx"
+        )
+        age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
+    elif DB_TYPE == "sqlite":
+        cursor = db.cursor()
+        query = """
+            SELECT district, name, age_group
+            FROM attendance_records
+            WHERE date = ?
+        """
+        cursor.execute(query, (date.strftime('%Y-%m-%d'),))
+        age_mapping = {
+            (row["district"], row["name"]): row["age_group"]
+            for row in cursor.fetchall()
+        }
 
     for district in set(attended.keys()).union(not_attended.keys()):
         main_district_value = parse_district(district)[0]

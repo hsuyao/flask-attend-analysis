@@ -1,35 +1,39 @@
 import os
 import logging
-from pymongo.mongo_client import MongoClient
-from pymongo.server_api import ServerApi
+import sqlite3
+from pymongo import MongoClient
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-# Constants
-START_COLUMN = 8
-BATCH_SIZE = 500
-
-# MongoDB Atlas Configuration
-MONGO_URI_DEFAULT = "mongodb+srv://attendance-analysis:aaaaaaaaa@cluster0.1c6d4dt.mongodb.net/attendance-analysis?retryWrites=true&w=majority&appName=Cluster0"
-MONGO_URI = os.getenv("MONGO_URI", MONGO_URI_DEFAULT)
-DATABASE_NAME = "attendance-analysis"
+# Environment variables
+DB_TYPE = os.getenv("DB_TYPE", "sqlite")  # Default to sqlite
+MONGO_URI = os.getenv("MONGO_URI")
+SQLITE_DB_PATH = "attendance.db"
 COLLECTION_NAME = "attendance_records"
+START_COLUMN = 7
 
-# Validate MongoDB URI
-if not MONGO_URI.startswith(("mongodb://", "mongodb+srv://")):
-    logger.error(f"Invalid MONGO_URI: {MONGO_URI}. Must start with 'mongodb://' or 'mongodb+srv://'")
-    raise ValueError("Invalid MongoDB URI scheme")
-
-# Initialize MongoDB client
-try:
-    mongo_client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
-    mongo_client.admin.command('ping')
-    logger.info("Successfully connected to MongoDB Atlas")
-except Exception as e:
-    logger.error(f"Failed to connect to MongoDB Atlas: {str(e)}")
-    raise
-
-db = mongo_client[DATABASE_NAME]
-collection = db[COLLECTION_NAME]
+# Initialize database connection
+if DB_TYPE == "mongodb":
+    if not MONGO_URI:
+        logger.error("MONGO_URI is required for MongoDB")
+        raise ValueError("MONGO_URI is not set")
+    try:
+        client = MongoClient(MONGO_URI)
+        db = client["attendance_db"]
+        logger.info("Successfully connected to MongoDB Atlas")
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {str(e)}")
+        raise
+elif DB_TYPE == "sqlite":
+    try:
+        db = sqlite3.connect(SQLITE_DB_PATH, check_same_thread=False)
+        db.row_factory = sqlite3.Row
+        logger.info(f"Connected to SQLite database at {SQLITE_DB_PATH}")
+    except Exception as e:
+        logger.error(f"Failed to connect to SQLite: {str(e)}")
+        raise
+else:
+    logger.error(f"Invalid DB_TYPE: {DB_TYPE}")
+    raise ValueError(f"Unsupported DB_TYPE: {DB_TYPE}")
