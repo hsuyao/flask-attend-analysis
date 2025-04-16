@@ -113,7 +113,7 @@ def bulk_write(records):
                     upsert=True
                 ) for r in records
             ]
-            for i in range(0, len(bulk_ops), 500):
+            for i in range(0, len(bulk_ops), 5000):
                 batch = bulk_ops[i:i + 500]
                 db[COLLECTION_NAME].bulk_write(batch, ordered=False)
                 logger.info(f"Bulk wrote {len(batch)} MongoDB records")
