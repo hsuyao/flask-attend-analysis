@@ -5,10 +5,26 @@ from io import BytesIO
 from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
-from config import logger, START_COLUMN, db, COLLECTION_NAME, BATCH_SIZE
+from config import logger, START_COLUMN, db, COLLECTION_NAME
 from utils import chinese_to_int, parse_district
 from database import get_six_month_averages
-from pymongo import UpdateOne
+from pymongo import UpdateOne, IndexModel, ASCENDING
+import time
+
+# Define batch size for writes
+BATCH_SIZE = 500
+
+def ensure_indexes():
+    """Ensure necessary indexes for performance"""
+    indexes = [
+        IndexModel([("name", ASCENDING), ("date", ASCENDING), ("attended", ASCENDING)], name="name_date_attended_idx"),
+        IndexModel([("date", ASCENDING), ("name", ASCENDING)], name="date_name_idx")
+    ]
+    try:
+        db[COLLECTION_NAME].create_indexes(indexes)
+        logger.info("Created/verified indexes for attendance_records")
+    except Exception as e:
+        logger.error(f"Failed to create indexes: {str(e)}")
 
 def convert_xls_to_xlsx(file_stream):
     logger.info("Converting .xls to .xlsx using soffice")
@@ -96,14 +112,24 @@ def classify_attendance(sheet, week_col, week_date):
     district_counts['總計'] = total_attendance
     return attended, not_attended, district_counts, main_district, main_district_counts, records
 
-def get_all_latest_attendance_dates(names, latest_date):
-    """Batch fetch latest attendance dates, ensuring all names have a date"""
+def get_all_latest_attendance_dates(names, latest_date, cache=None):
+    """Batch fetch latest attendance dates with caching"""
     if not names:
         return {}
+    if cache is None:
+        cache = {}
+    
+    # Return cached results if available
+    names_to_query = [name for name in names if name not in cache]
+    if not names_to_query:
+        logger.debug(f"Cache hit for all {len(names)} names")
+        return {name: cache[name] for name in names}
+
+    start_time = time.time()
     try:
         pipeline = [
             {"$match": {
-                "name": {"$in": list(names)},
+                "name": {"$in": names_to_query},
                 "attended": 1,
                 "date": {"$lte": latest_date.strftime('%Y-%m-%d')}
             }},
@@ -113,14 +139,16 @@ def get_all_latest_attendance_dates(names, latest_date):
                 "max_date": {"$first": "$date"}
             }}
         ]
-        results = db[COLLECTION_NAME].aggregate(pipeline, hint="date_name_attended_idx")
-        # Initialize with default date for all names
+        results = db[COLLECTION_NAME].aggregate(pipeline, hint="name_date_attended_idx")
         latest_dates = {name: datetime(1970, 1, 1) for name in names}
-        # Update with actual dates from results
         for doc in results:
             if doc["max_date"]:
-                latest_dates[doc["_id"]] = datetime.strptime(doc["max_date"], '%Y-%m-%d')
-        logger.debug(f"Retrieved latest dates for {len(latest_dates)} names")
+                date = datetime.strptime(doc["max_date"], '%Y-%m-%d')
+                latest_dates[doc["_id"]] = date
+                cache[doc["_id"]] = date
+        
+        elapsed = time.time() - start_time
+        logger.debug(f"Retrieved latest dates for {len(names_to_query)} names in {elapsed:.2f}s")
         return latest_dates
     except Exception as e:
         logger.error(f"Failed to get latest attendance dates: {str(e)}")
@@ -172,7 +200,7 @@ def write_summary(new_sheet, attended, not_attended, latest_date, previous_week_
             combined_list.extend((name, False, False) for name in not_attended_list)
 
         latest_dates = get_all_latest_attendance_dates([name for name, _, _ in combined_list], latest_date)
-        combined_list.sort(key=lambda x: (-int(x[2]), latest_dates[x[0]]), reverse=True)
+        combined_list.sort(key=lambda x: (-int(x[2]), latest_dates.get(x[0], datetime(1970, 1, 1))), reverse=True)
 
         for r, (name, is_attended, has_highlight) in enumerate(combined_list[:max_len]):
             col_offset = i * 3 + 1
@@ -191,6 +219,11 @@ def write_summary(new_sheet, attended, not_attended, latest_date, previous_week_
 
 def process_excel(file_stream, file_extension):
     logger.info(f"Processing Excel file, extension: {file_extension}")
+    start_time = time.time()
+    
+    # Ensure indexes at startup
+    ensure_indexes()
+
     file_stream.seek(0)
     file_content = file_stream.read()
     buffered_stream = BytesIO(file_content)
@@ -239,6 +272,7 @@ def process_excel(file_stream, file_extension):
     latest_main_district_counts = None
     all_records = []
     all_names = set()
+    date_cache = {}  # Cache for latest attendance dates
 
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
@@ -271,56 +305,97 @@ def process_excel(file_stream, file_extension):
             latest_districts = district_counts
             latest_main_district_counts = main_district_counts
 
-    if all_records:
-        bulk_ops = [
-            UpdateOne(
-                {"name": r["name"], "date": r["date"]},
-                {"$set": r},
-                upsert=True
-            ) for r in all_records
-        ]
-        for i in range(0, len(bulk_ops), BATCH_SIZE):
-            batch = bulk_ops[i:i + BATCH_SIZE]
-            db[COLLECTION_NAME].bulk_write(batch, ordered=False)
-            logger.info(f"Bulk wrote {len(batch)} records")
-
-    if latest_date > datetime(1970, 1, 1):
-        six_months_ago = latest_date - timedelta(days=180)
-        existing_keys = set(
-            (doc["name"], doc["date"])
-            for doc in db[COLLECTION_NAME].find(
-                {"date": {"$gte": six_months_ago.strftime("%Y-%m-%d"), "$lte": latest_date.strftime("%Y-%m-%d")}},
-                {"name": 1, "date": 1, "_id": 0}
-            )
-        )
-
-        weeks = [six_months_ago + timedelta(days=7 * i) for i in range((latest_date - six_months_ago).days // 7 + 1)]
+    # Write records to database
+    if all_records and all_names:
         bulk_ops = []
-        for name in all_names:
-            district = next((d for d in attended if name in attended.get(d, [])), None) or \
-                      next((d for d in not_attended if name in not_attended.get(d, [])), None) or "未知區"
-            for week in weeks:
-                week_str = week.strftime('%Y-%m-%d')
-                if (name, week_str) not in existing_keys:
-                    bulk_ops.append(UpdateOne(
-                        {"name": name, "date": week_str},
-                        {"$set": {
-                            "name": name,
-                            "date": week_str,
-                            "attended": 0,
-                            "district": district,
-                            "age_group": "未知"
-                        }},
-                        upsert=True
-                    ))
+        existing_keys = set()
+        write_start = time.time()
+        
+        # Check existing records efficiently
+        min_date = min(r["date"] for r in all_records)
+        max_date = max(r["date"] for r in all_records)
+        try:
+            cursor = db[COLLECTION_NAME].find(
+                {
+                    "date": {"$gte": min_date, "$lte": max_date},
+                    "name": {"$in": list(all_names)}
+                },
+                {"name": 1, "date": 1, "_id": 0},
+                hint="date_name_idx"
+            )
+            existing_keys = set((doc["name"], doc["date"]) for doc in cursor)
+        except Exception as e:
+            logger.error(f"Failed to query existing records: {str(e)}")
+            existing_keys = set()  # Fallback to empty set
+
+        # Only include new or changed records
+        for r in all_records:
+            key = (r["name"], r["date"])
+            if key not in existing_keys:
+                bulk_ops.append(UpdateOne(
+                    {"name": r["name"], "date": r["date"]},
+                    {"$set": r},
+                    upsert=True
+                ))
 
         if bulk_ops:
-            for i in range(0, len(bulk_ops), BATCH_SIZE):
-                batch = bulk_ops[i:i + BATCH_SIZE]
-                db[COLLECTION_NAME].bulk_write(batch, ordered=False)
-                logger.info(f"Bulk wrote {len(batch)} missing records")
+            try:
+                for i in range(0, len(bulk_ops), BATCH_SIZE):
+                    batch = bulk_ops[i:i + BATCH_SIZE]
+                    db[COLLECTION_NAME].bulk_write(batch, ordered=False)
+                    logger.info(f"Bulk wrote {len(batch)} records")
+            except Exception as e:
+                logger.error(f"Failed to bulk write records: {str(e)}")
+        
+        write_elapsed = time.time() - write_start
+        logger.info(f"Database write completed in {write_elapsed:.2f}s")
+
+    # Supplement missing records for the latest week only
+    if latest_date > datetime(1970, 1, 1) and all_names:
+        supplement_start = time.time()
+        latest_week_str = latest_date.strftime("%Y-%m-%d")
+        existing_keys = set()
+        try:
+            cursor = db[COLLECTION_NAME].find(
+                {"date": latest_week_str, "name": {"$in": list(all_names)}},
+                {"name": 1, "date": 1, "_id": 0},
+                hint="date_name_idx"
+            )
+            existing_keys = set((doc["name"], doc["date"]) for doc in cursor)
+        except Exception as e:
+            logger.error(f"Failed to query latest week records: {str(e)}")
+
+        bulk_ops = []
+        for name in all_names:
+            if (name, latest_week_str) not in existing_keys:
+                district = next((d for d in attended if name in attended.get(d, [])), None) or \
+                          next((d for d in not_attended if name in not_attended.get(d, [])), None) or "未知區"
+                bulk_ops.append(UpdateOne(
+                    {"name": name, "date": latest_week_str},
+                    {"$set": {
+                        "name": name,
+                        "date": latest_week_str,
+                        "attended": 0,
+                        "district": district,
+                        "age_group": "未知"
+                    }},
+                    upsert=True
+                ))
+
+        if bulk_ops:
+            try:
+                for i in range(0, len(bulk_ops), BATCH_SIZE):
+                    batch = bulk_ops[i:i + BATCH_SIZE]
+                    db[COLLECTION_NAME].bulk_write(batch, ordered=False)
+                    logger.info(f"Bulk wrote {len(batch)} missing records for {latest_week_str}")
+            except Exception as e:
+                logger.error(f"Failed to bulk write missing records: {str(e)}")
+
+        supplement_elapsed = time.time() - supplement_start
+        logger.info(f"Missing records supplement completed in {supplement_elapsed:.2f}s")
 
     if not all_attendance_data:
+        logger.warning("No valid attendance data processed")
         return {
             'latest_analytic_date': None,
             'latest_attendance_data': None,
@@ -331,7 +406,8 @@ def process_excel(file_stream, file_extension):
             'all_attendance_data': []
         }
 
-    logger.info("Excel processing completed")
+    total_elapsed = time.time() - start_time
+    logger.info(f"Excel processing completed in {total_elapsed:.2f}s")
     return {
         'latest_analytic_date': latest_date.strftime("%Y年%m月%d日") if latest_date > datetime(1970, 1, 1) else None,
         'latest_attendance_data': {'attended': latest_attended, 'not_attended': latest_not_attended} if latest_attended else None,
@@ -339,7 +415,8 @@ def process_excel(file_stream, file_extension):
         'latest_district_counts': latest_districts,
         'latest_main_district': latest_main_district,
         'latest_main_district_counts': latest_main_district_counts,
-        'all_attendance_data': all_attendance_data
+        'all_attendance_data': all_attendance_data,
+        'date_cache': date_cache  # Pass cache for rendering
     }
 
 def generate_excel(all_attendance_data):
