@@ -43,7 +43,6 @@ def process_excel_task(self, file_content, file_extension):
         self.update_state(state='PROGRESS', meta={'stage': 'Parsing Excel', 'progress': 20})
         result = process_excel(buffered_stream, file_extension)
         self.update_state(state='PROGRESS', meta={'stage': 'Writing to database', 'progress': 60})
-        # Database writing is handled within process_excel
         self.update_state(state='PROGRESS', meta={'stage': 'Finalizing', 'progress': 90})
         logger.info("Excel processing task completed successfully")
         return result
@@ -97,15 +96,39 @@ def task_status(task_id):
     logger.debug(f"Task status: {task_id} - {response}")
     return jsonify(response)
 
+@app.route('/task_result/<task_id>')
+def task_result(task_id):
+    task = process_excel_task.AsyncResult(task_id)
+    if task.state == 'SUCCESS':
+        result = task.get()
+        logger.info(f"Task {task_id} result: {result}")
+        session['latest_attendance_data'] = result.get('latest_attendance_data')
+        session['latest_week_display'] = result.get('latest_week_display')
+        session['latest_district_counts'] = result.get('latest_district_counts')
+        session['latest_main_district_counts'] = result.get('latest_main_district_counts')
+        session['all_attendance_data'] = result.get('all_attendance_data')
+        session['latest_main_district'] = result.get('latest_main_district')
+        logger.info(f"Session updated with task result: {session.get('latest_attendance_data')}")
+        return jsonify({"status": "success", "redirect": url_for('result')})
+    elif task.state == 'FAILURE':
+        logger.error(f"Task {task_id} failed: {task.info.get('error')}")
+        return jsonify({"status": "error", "error": task.info.get('error')}), 500
+    else:
+        return jsonify({"status": "pending"}), 202
+
 @app.route('/result')
 def result():
+    logger.info(f"Session contents: {session}")
     latest_attendance_data = session.get('latest_attendance_data')
+    logger.info(f"latest_attendance_data: {latest_attendance_data}")
     latest_week_display = session.get('latest_week_display', "No week data")
     latest_district_counts = session.get('latest_district_counts')
     latest_main_district_counts = session.get('latest_main_district_counts')
     all_attendance_data = session.get('all_attendance_data', [])
+    logger.info(f"all_attendance_data length: {len(all_attendance_data)}")
 
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
+        logger.error("No valid attendance data found in session")
         return render_template('index.html', error="No valid attendance data", version=get_version_info())
 
     all_attendance_data.sort(key=lambda x: x[0])
@@ -177,21 +200,8 @@ def classify_attendance_for_week(week_data):
     main_district_counts = {}
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
 
-    if DB_TYPE == "mongodb":
-        records = db[COLLECTION_NAME].find({"date": date.strftime('%Y-%m-%d')})
-        age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
-    elif DB_TYPE == "sqlite":
-        cursor = db.cursor()
-        query = """
-            SELECT district, name, age_group
-            FROM attendance_records
-            WHERE date = ?
-        """
-        cursor.execute(query, (date.strftime('%Y-%m-%d'),))
-        age_mapping = {
-            (row["district"], row["name"]): row["age_group"]
-            for row in cursor.fetchall()
-        }
+    records = db[COLLECTION_NAME].find({"date": date.strftime('%Y-%m-%d')})
+    age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
 
     for district in set(attended.keys()).union(not_attended.keys()):
         main_district_value = parse_district(district)[0]

@@ -99,9 +99,23 @@
                         $('#progressBar').css('width', response.progress + '%').text(response.progress + '%');
                         if (response.state === 'SUCCESS') {
                             clearInterval(interval);
-                            modal.hide();
-                            sessionStorage.setItem('taskResult', JSON.stringify(response.result));
-                            window.location.href = '/result';
+                            $.ajax({
+                                url: '/task_result/' + taskId,
+                                type: 'GET',
+                                success: function(result) {
+                                    if (result.status === 'success') {
+                                        modal.hide();
+                                        window.location.href = result.redirect;
+                                    } else {
+                                        modal.hide();
+                                        alert('處理失敗：' + result.error);
+                                    }
+                                },
+                                error: function() {
+                                    modal.hide();
+                                    alert('無法儲存任務結果');
+                                }
+                            });
                         } else if (response.state === 'FAILURE') {
                             clearInterval(interval);
                             modal.hide();

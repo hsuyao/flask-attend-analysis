@@ -1,6 +1,5 @@
 import os
 import logging
-import sqlite3
 from pymongo import MongoClient
 
 # Configure logging
@@ -8,9 +7,8 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 # Environment variables
-DB_TYPE = os.getenv("DB_TYPE", "sqlite")  # Default to sqlite
+DB_TYPE = os.getenv("DB_TYPE", "mongodb")  # Default to mongodb
 MONGO_URI = os.getenv("MONGO_URI")
-SQLITE_DB_PATH = "attendance.db"
 COLLECTION_NAME = "attendance_records"
 START_COLUMN = 7
 
@@ -25,14 +23,6 @@ if DB_TYPE == "mongodb":
         logger.info("Successfully connected to MongoDB Atlas")
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB: {str(e)}")
-        raise
-elif DB_TYPE == "sqlite":
-    try:
-        db = sqlite3.connect(SQLITE_DB_PATH, check_same_thread=False)
-        db.row_factory = sqlite3.Row
-        logger.info(f"Connected to SQLite database at {SQLITE_DB_PATH}")
-    except Exception as e:
-        logger.error(f"Failed to connect to SQLite: {str(e)}")
         raise
 else:
     logger.error(f"Invalid DB_TYPE: {DB_TYPE}")
