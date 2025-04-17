@@ -1,34 +1,24 @@
-# Use an official Python runtime as the base image
+# 使用 Python 3.8 作為基礎映像，與您的環境一致
 FROM python:3.8-slim
 
-# Install LibreOffice for soffice
+# 安裝系統依賴，包括 LibreOffice（用於 Excel 處理）
 RUN apt-get update && \
     apt-get install -y libreoffice redis-server && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
+# 設定工作目錄
 WORKDIR /app
 
-# Copy requirements.txt first to leverage Docker caching
+# 複製並安裝 Python 依賴
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Upgrade pip and install Python dependencies
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip cache purge
-
-# Copy the rest of the application files
+# 複製應用程式程式碼
 COPY . .
 
-# Generate version info
-RUN COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || date -u +%Y%m%d%H%M%S) && \
-    BUILD_DATE=$(date -u +%Y%m%d) && \
-    echo "${BUILD_DATE}" > /app/version_info.txt && \
-    cat /app/version_info.txt
+# 暴露 Flask 應用端口
+EXPOSE 5000
 
-# Create directories for session storage and database
-RUN mkdir -p /app/sessions /app/db
-
-# Command to run the application with database initialization
-CMD ["sh", "-c", "python -c 'from database import init_database; init_database()' && python app.py"]
+# 預設命令（將在 docker-compose.yml 中覆蓋）
+CMD ["python", "app.py"]
