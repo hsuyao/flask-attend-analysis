@@ -118,7 +118,7 @@ def write_summary(new_sheet, attended, not_attended, latest_date, previous_week_
             cell.font = header_font
             cell.alignment = Alignment(horizontal='center')
 
-        for col, value in enumerate(["本週到會", "未到會", "半年平均出勤率"], i * 3 + 1):
+        for col, value in enumerate(["本週到會", "未到會", "半年平均出席率"], i * 3 + 1):
             cell = new_sheet.cell(row + 1, col)
             cell.value = value
             cell.fill = subheader_fill

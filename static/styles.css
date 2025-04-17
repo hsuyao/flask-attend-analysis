@@ -22,7 +22,7 @@ body {
 .flex-container {
     display: flex;
     flex-wrap: nowrap; /* 防止换行 */
-    width: 618px; /* 468px 出勤 + 130px 统计 + 20px 间距 */
+    width: 618px; /* 468px 出席 + 130px 统计 + 20px 间距 */
     margin: 0 auto;
     gap: 20px;
     justify-content: center;
@@ -33,7 +33,7 @@ body {
 }
 
 .attendance-wrapper {
-    width: 468px; /* 固定出勤表格宽度，6 列 × 78px */
+    width: 468px; /* 固定出席表格宽度，6 列 × 78px */
     max-height: 70vh; /* 限制高度以启用垂直滚动 */
     flex: none; /* 移除 Flex 缩放 */
     overflow-x: auto; /* 水平滚动条 */
