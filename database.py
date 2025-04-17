@@ -9,11 +9,13 @@ def init_database():
     """Initialize database (create collection and indexes)"""
     try:
         indexes = [
-            {"key": {"name": 1, "date": 1}, "unique": True, "name": "name_date_idx"},
-            {"key": {"date": 1, "name": 1}, "name": "date_name_idx"}
+            {"key": [("name", 1), ("date", 1)], "unique": True, "name": "name_date_idx"},
+            {"key": [("date", 1), ("name", 1)], "name": "date_name_idx"}
         ]
         for index in indexes:
-            db[COLLECTION_NAME].create_index(**index)
+            keys = index.pop("key")
+            db[COLLECTION_NAME].create_index(keys, **index)
+            logger.debug(f"Created index: {index.get('name')}")
         logger.info("Initialized MongoDB with indexes for attendance_records")
         return db
     except Exception as e:
