@@ -17,6 +17,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 複製應用程式程式碼
 COPY . .
 
+# Generate version_info.txt during build
+RUN if [ -d .git ]; then \
+        echo "git-$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)" > /app/version_info.txt; \
+    else \
+        echo "custom-$(date -u +%Y%m%d%H%M%S)" > /app/version_info.txt; \
+    fi
+
 # 複製 supervisord 配置文件
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
