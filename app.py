@@ -270,15 +270,22 @@ def history():
 
 @app.route('/get_weeks_for_district/<district>')
 def get_weeks_for_district(district):
-    """Get available weeks for a given main district"""
+    """Get available weeks for a given main district with at least one attendance"""
     try:
-        # Find all dates for the main district
-        records = db[COLLECTION_NAME].find(
-            {"district": {"$regex": f"^{district}"}},
-            {"date": 1, "_id": 0}
-        ).sort("date", -1)
-        dates = sorted(set(r["date"] for r in records), reverse=True)
-        
+        # Find dates with at least one attended record for the main district
+        pipeline = [
+            {"$match": {
+                "district": {"$regex": f"^{district}"},
+                "attended": 1
+            }},
+            {"$group": {
+                "_id": "$date"
+            }},
+            {"$sort": {"_id": -1}}
+        ]
+        dates = [doc["_id"] for doc in db[COLLECTION_NAME].aggregate(pipeline)]
+        logger.debug(f"Found {len(dates)} dates with attendance for district {district}")
+
         # Convert dates to display format
         weeks = []
         for date_str in dates:
@@ -309,6 +316,8 @@ def get_history_data(district, week_date):
             "district": {"$regex": f"^{district}"},
             "date": week_date
         })
+        records_list = list(records)
+        logger.debug(f"Fetched {len(records_list)} records for {district} on {week_date}")
 
         # Organize data
         attended = {}
@@ -318,20 +327,32 @@ def get_history_data(district, week_date):
         age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
         age_mapping = {}
 
-        for record in records:
+        for record in records_list:
             sub_district = record["district"]
             name = record["name"]
-            age_mapping[(sub_district, name)] = record["age_group"]
-            if record["attended"] == 1:
+            age_mapping[(sub_district, name)] = record.get("age_group", "青職以上")
+            # Handle potential string or integer values for 'attended'
+            attended_status = record.get("attended")
+            if isinstance(attended_status, str):
+                attended_status = int(attended_status)
+            logger.debug(f"Record: {name}, district: {sub_district}, attended: {attended_status}")
+            if attended_status == 1:
                 attended.setdefault(sub_district, []).append(name)
             else:
                 not_attended.setdefault(sub_district, []).append(name)
 
-        # Calculate district counts
-        for sub_district in set(attended.keys()).union(not_attended.keys()):
+        # Log attendance data
+        logger.debug(f"Attended: {attended}")
+        logger.debug(f"Not attended: {not_attended}")
+
+        # Calculate district counts based only on attended
+        all_districts = set(attended.keys()).union(not_attended.keys())
+        logger.debug(f"All districts: {all_districts}")
+        for sub_district in all_districts:
             district_counts[sub_district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
             main_district_counts[district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
 
+        # Count only attended
         for sub_district, names in attended.items():
             for name in names:
                 effective_age = age_mapping.get((sub_district, name), '青職以上')
@@ -342,6 +363,8 @@ def get_history_data(district, week_date):
 
         total_attendance = sum(d['total'] for d in district_counts.values())
         district_counts['總計'] = total_attendance
+        logger.debug(f"District counts: {district_counts}")
+        logger.debug(f"Main district counts: {main_district_counts}")
 
         # Get previous week's data for highlight comparison
         prev_date = (date - timedelta(days=7)).strftime('%Y-%m-%d')
@@ -352,7 +375,10 @@ def get_history_data(district, week_date):
         prev_attended = set()
         prev_not_attended = set()
         for record in prev_records:
-            if record["attended"] == 1:
+            attended_status = record.get("attended")
+            if isinstance(attended_status, str):
+                attended_status = int(attended_status)
+            if attended_status == 1:
                 prev_attended.add((record["district"], record["name"]))
             else:
                 prev_not_attended.add((record["district"], record["name"]))
@@ -360,8 +386,10 @@ def get_history_data(district, week_date):
         # Prepare all_attendance_data for rendering
         attendance_data = {'attended': attended, 'not_attended': not_attended}
         all_attendance_data = [(date, attendance_data, week_display)]
-        prev_attendance_data = {'attended': {k: [n for d, n in prev_attended if d == k] for k in attended.keys()},
-                              'not_attended': {k: [n for d, n in prev_not_attended if d == k] for k in not_attended.keys()}}
+        prev_attendance_data = {
+            'attended': {k: [n for d, n in prev_attended if d == k] for k in all_districts},
+            'not_attended': {k: [n for d, n in prev_not_attended if d == k] for k in all_districts}
+        }
         if prev_attended or prev_not_attended:
             all_attendance_data.insert(0, (datetime.strptime(prev_date, '%Y-%m-%d'), prev_attendance_data, ""))
 
@@ -372,6 +400,7 @@ def get_history_data(district, week_date):
         for sub_district in not_attended:
             all_names.update(not_attended[sub_district])
         avg_attendance_rates = get_six_month_averages(list(all_names), date)
+        logger.debug(f"Average attendance rates: {avg_attendance_rates}")
 
         # Render table
         attendance_table_html = render_attendance_table(
