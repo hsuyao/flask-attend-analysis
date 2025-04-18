@@ -23,6 +23,9 @@
             <input type="file" name="file" accept=".xls,.xlsx" class="upload-input">
             <input type="button" value="以週為單位進行統計" class="button" onclick="startUpload()">
         </form>
+        <div class="button-container">
+            <a href="{{ url_for('history') }}" class="button">查看週報表歷史紀錄</a>
+        </div>
     </div>
 
     <!-- Modal for progress -->

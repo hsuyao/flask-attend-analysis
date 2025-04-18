@@ -6,10 +6,10 @@ import os
 from celery import Celery
 from config import db, COLLECTION_NAME, DB_TYPE
 from excel_handler import process_excel
-from render_table import render_attendance_table
+from render_table import render_attendance_table, render_stats_table
 from database import init_database, get_six_month_averages
-from utils import parse_district
-from datetime import datetime
+from utils import parse_district, chinese_to_int
+from datetime import datetime, timedelta
 import logging
 
 app = Flask(__name__)
@@ -243,6 +243,152 @@ def download_file():
     except Exception as e:
         logger.error(f"Failed to generate Excel: {str(e)}")
         return jsonify({"error": f"Download failed: {str(e)}"}), 500
+
+@app.route('/history')
+def history():
+    """Render history page with available main districts"""
+    try:
+        # Get distinct main districts from database
+        districts = db[COLLECTION_NAME].distinct("district")
+        main_districts = sorted(
+            set(parse_district(d)[0] for d in districts if parse_district(d)[0]),
+            key=lambda x: chinese_to_int(x[0])
+        )
+        logger.info(f"Loaded main districts: {main_districts}")
+        return render_template(
+            'history.html',
+            main_districts=main_districts,
+            version=get_version_info()
+        )
+    except Exception as e:
+        logger.error(f"Failed to load history page: {str(e)}")
+        return render_template(
+            'index.html',
+            error="無法載入歷史紀錄頁面",
+            version=get_version_info()
+        )
+
+@app.route('/get_weeks_for_district/<district>')
+def get_weeks_for_district(district):
+    """Get available weeks for a given main district"""
+    try:
+        # Find all dates for the main district
+        records = db[COLLECTION_NAME].find(
+            {"district": {"$regex": f"^{district}"}},
+            {"date": 1, "_id": 0}
+        ).sort("date", -1)
+        dates = sorted(set(r["date"] for r in records), reverse=True)
+        
+        # Convert dates to display format
+        weeks = []
+        for date_str in dates:
+            date = datetime.strptime(date_str, '%Y-%m-%d')
+            month = date.strftime('%Y年%m月')
+            week_num = (date.day - 1) // 7 + 1
+            week_display = f"{month}第{chinese_to_int_reverse(week_num)}週"
+            weeks.append({"date": date_str, "display": week_display})
+        
+        logger.info(f"Loaded {len(weeks)} weeks for district {district}")
+        return jsonify({"weeks": weeks})
+    except Exception as e:
+        logger.error(f"Failed to get weeks for district {district}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_history_data/<district>/<week_date>')
+def get_history_data(district, week_date):
+    """Get attendance data for a specific district and week"""
+    try:
+        # Convert week_date to datetime
+        date = datetime.strptime(week_date, '%Y-%m-%d')
+        month = date.strftime('%Y年%m月')
+        week_num = (date.day - 1) // 7 + 1
+        week_display = f"{month}第{chinese_to_int_reverse(week_num)}週"
+
+        # Fetch attendance data from database
+        records = db[COLLECTION_NAME].find({
+            "district": {"$regex": f"^{district}"},
+            "date": week_date
+        })
+
+        # Organize data
+        attended = {}
+        not_attended = {}
+        district_counts = {}
+        main_district_counts = {}
+        age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+        age_mapping = {}
+
+        for record in records:
+            sub_district = record["district"]
+            name = record["name"]
+            age_mapping[(sub_district, name)] = record["age_group"]
+            if record["attended"] == 1:
+                attended.setdefault(sub_district, []).append(name)
+            else:
+                not_attended.setdefault(sub_district, []).append(name)
+
+        # Calculate district counts
+        for sub_district in set(attended.keys()).union(not_attended.keys()):
+            district_counts[sub_district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
+            main_district_counts[district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
+
+        for sub_district, names in attended.items():
+            for name in names:
+                effective_age = age_mapping.get((sub_district, name), '青職以上')
+                district_counts[sub_district]['total'] += 1
+                main_district_counts[district]['total'] += 1
+                district_counts[sub_district]['ages'][effective_age] += 1
+                main_district_counts[district]['ages'][effective_age] += 1
+
+        total_attendance = sum(d['total'] for d in district_counts.values())
+        district_counts['總計'] = total_attendance
+
+        # Get previous week's data for highlight comparison
+        prev_date = (date - timedelta(days=7)).strftime('%Y-%m-%d')
+        prev_records = db[COLLECTION_NAME].find({
+            "district": {"$regex": f"^{district}"},
+            "date": prev_date
+        })
+        prev_attended = set()
+        prev_not_attended = set()
+        for record in prev_records:
+            if record["attended"] == 1:
+                prev_attended.add((record["district"], record["name"]))
+            else:
+                prev_not_attended.add((record["district"], record["name"]))
+
+        # Prepare all_attendance_data for rendering
+        attendance_data = {'attended': attended, 'not_attended': not_attended}
+        all_attendance_data = [(date, attendance_data, week_display)]
+        prev_attendance_data = {'attended': {k: [n for d, n in prev_attended if d == k] for k in attended.keys()},
+                              'not_attended': {k: [n for d, n in prev_not_attended if d == k] for k in not_attended.keys()}}
+        if prev_attended or prev_not_attended:
+            all_attendance_data.insert(0, (datetime.strptime(prev_date, '%Y-%m-%d'), prev_attendance_data, ""))
+
+        # Calculate attendance rates
+        all_names = set()
+        for sub_district in attended:
+            all_names.update(attended[sub_district])
+        for sub_district in not_attended:
+            all_names.update(not_attended[sub_district])
+        avg_attendance_rates = get_six_month_averages(list(all_names), date)
+
+        # Render table
+        attendance_table_html = render_attendance_table(
+            week_display, attendance_data, all_attendance_data,
+            district_counts, main_district_counts, avg_attendance_rates
+        )
+
+        logger.info(f"Rendered history data for {district} on {week_date}")
+        return jsonify({'attendance_table': attendance_table_html})
+    except Exception as e:
+        logger.error(f"Failed to get history data for {district} on {week_date}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def chinese_to_int_reverse(num):
+    """Convert integer to Chinese numeral"""
+    numeral_map = {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '七', 8: '八', 9: '九', 10: '十'}
+    return numeral_map.get(num, str(num))
 
 if __name__ == '__main__':
     init_database()
