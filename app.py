@@ -367,21 +367,41 @@ def get_history_data(district, week_date):
         logger.debug(f"Main district counts: {main_district_counts}")
 
         # Get previous week's data for highlight comparison
-        prev_date = (date - timedelta(days=7)).strftime('%Y-%m-%d')
-        prev_records = db[COLLECTION_NAME].find({
-            "district": {"$regex": f"^{district}"},
-            "date": prev_date
-        })
+        # Find the most recent date before the current week_date
+        prev_records = db[COLLECTION_NAME].aggregate([
+            {"$match": {
+                "district": {"$regex": f"^{district}"},
+                "date": {"$lt": week_date}
+            }},
+            {"$group": {
+                "_id": "$date"
+            }},
+            {"$sort": {"_id": -1}},
+            {"$limit": 1}
+        ])
+        prev_date = None
+        for doc in prev_records:
+            prev_date = doc["_id"]
+            break
+        logger.debug(f"Previous week date for {week_date}: {prev_date}")
+
         prev_attended = set()
         prev_not_attended = set()
-        for record in prev_records:
-            attended_status = record.get("attended")
-            if isinstance(attended_status, str):
-                attended_status = int(attended_status)
-            if attended_status == 1:
-                prev_attended.add((record["district"], record["name"]))
-            else:
-                prev_not_attended.add((record["district"], record["name"]))
+        if prev_date:
+            prev_records = db[COLLECTION_NAME].find({
+                "district": {"$regex": f"^{district}"},
+                "date": prev_date
+            })
+            for record in prev_records:
+                attended_status = record.get("attended")
+                if isinstance(attended_status, str):
+                    attended_status = int(attended_status)
+                if attended_status == 1:
+                    prev_attended.add((record["district"], record["name"]))
+                else:
+                    prev_not_attended.add((record["district"], record["name"]))
+            logger.debug(f"Previous week attended: {prev_attended}")
+            logger.debug(f"Previous week not attended: {prev_not_attended}")
 
         # Prepare all_attendance_data for rendering
         attendance_data = {'attended': attended, 'not_attended': not_attended}
@@ -390,7 +410,7 @@ def get_history_data(district, week_date):
             'attended': {k: [n for d, n in prev_attended if d == k] for k in all_districts},
             'not_attended': {k: [n for d, n in prev_not_attended if d == k] for k in all_districts}
         }
-        if prev_attended or prev_not_attended:
+        if prev_date and (prev_attended or prev_not_attended):
             all_attendance_data.insert(0, (datetime.strptime(prev_date, '%Y-%m-%d'), prev_attendance_data, ""))
 
         # Calculate attendance rates
