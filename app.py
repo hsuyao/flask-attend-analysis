@@ -8,7 +8,7 @@ from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table
 from database import init_database, get_six_month_averages
 from config import db, COLLECTION_NAME
-from utils import parse_district, chinese_to_int
+from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
 import logging
 
@@ -144,7 +144,7 @@ def result():
         logger.error("No valid attendance data found in session")
         return render_template('index.html', error="No valid attendance data", version=get_version_info())
 
-    all_attendance_data.sort(key=lambda x: x[2])  # Sort by week_display
+    all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
     placeholder_date = datetime.now()
 
     all_names = set()
@@ -182,6 +182,7 @@ def get_week_data(week_idx):
             'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>No data</th></tr></table></div>'
         }), 400
 
+    all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
     date, attendance_data, week_name = all_attendance_data[week_idx]
     latest_main_district = session.get('latest_main_district', '')
     _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(all_attendance_data[week_idx])
@@ -294,10 +295,10 @@ def get_weeks_for_district(district):
             }},
             {"$group": {
                 "_id": "$week_display"
-            }},
-            {"$sort": {"_id": 1}}
+            }}
         ]
         weeks = [doc["_id"] for doc in db[COLLECTION_NAME].aggregate(pipeline)]
+        weeks.sort(key=parse_week_display)  # Sort by parsed week_display
         logger.info(f"Loaded {len(weeks)} weeks for district {district}")
         return jsonify({"weeks": [{"date": week, "display": week} for week in weeks]})
     except Exception as e:
@@ -350,21 +351,13 @@ def get_history_data(district, week_display):
         total_attendance = sum(d['total'] for d in district_counts.values())
         district_counts['總計'] = total_attendance
 
-        prev_records = db[COLLECTION_NAME].aggregate([
-            {"$match": {
-                "district": {"$regex": f"^{district}"},
-                "week_display": {"$lt": week_display}
-            }},
-            {"$group": {
-                "_id": "$week_display"
-            }},
-            {"$sort": {"_id": -1}},
-            {"$limit": 1}
-        ])
-        prev_week = None
-        for doc in prev_records:
-            prev_week = doc["_id"]
-            break
+        # Get all week_displays before the current one, sorted by parsed week_display
+        all_weeks = db[COLLECTION_NAME].distinct("week_display", {
+            "district": {"$regex": f"^{district}"},
+            "week_display": {"$lt": week_display}
+        })
+        all_weeks.sort(key=parse_week_display, reverse=True)
+        prev_week = all_weeks[0] if all_weeks else None
 
         prev_attended = set()
         prev_not_attended = set()

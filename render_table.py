@@ -1,5 +1,5 @@
 from config import logger
-from utils import chinese_to_int, parse_district
+from utils import chinese_to_int, parse_district, parse_week_display
 from database import get_six_month_averages, get_all_latest_attendance_dates
 from datetime import datetime
 
@@ -50,7 +50,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         return '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
 
     previous_week_data = None
-    all_attendance_data.sort(key=lambda x: x[2])  # Sort by week_display
+    all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
     current_week_idx = next((idx for idx, (_, _, week_name) in enumerate(all_attendance_data) if week_name == week_display), None)
 
     if current_week_idx is not None and current_week_idx > 0:
@@ -89,12 +89,12 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             latest_dates = get_all_latest_attendance_dates(names, placeholder_date)
             logger.debug(f"District {district}: Attendance rates {[(name, avg_attendance_rates.get(name, 0.0)) for name in names]}")
             logger.debug(f"District {district}: Highlights {[(name, has_highlight) for name, _, has_highlight in combined_list]}")
-            # Sort by highlight status (True first), then attendance rate (descending), then latest date
+            # Sort by highlight status (True first), then attendance rate (descending), then latest date (parsed)
             combined_list.sort(
                 key=lambda x: (
                     -int(x[2]),                           # Primary: highlight (True first)
                     -avg_attendance_rates.get(x[0], 0.0),  # Secondary: descending attendance rate
-                    latest_dates.get(x[0], '')            # Tertiary: latest week_display (string comparison)
+                    parse_week_display(latest_dates.get(x[0], ''))  # Tertiary: parsed week_display
                 )
             )
 

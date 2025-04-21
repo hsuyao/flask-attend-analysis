@@ -1,4 +1,5 @@
 from config import logger
+import re
 
 def chinese_to_int(chinese_num):
     """Convert Chinese numerals to Arabic integers."""
@@ -27,4 +28,23 @@ def parse_district(district_name):
     sub_district_num = chinese_to_int(sub_part) if sub_part in ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'] else 0
     return (main_part, sub_district_num)
 
-# 原有的 render_attendance_table 函數已移除，因為它現在位於 render_table.py 中
+def parse_week_display(week_display):
+    """
+    Parse week_display (e.g., '2025年4月第一週') into a tuple (year, month, week_number).
+    Returns: (year, month, week) for chronological sorting.
+    """
+    if not week_display:
+        return (0, 0, 0)
+    
+    # Match format: YYYY年MM月第N週
+    match = re.match(r'(\d{4})年(\d{1,2})月第([一二三四五六七八九十]+)週', week_display)
+    if not match:
+        logger.warning(f"Invalid week_display format: {week_display}")
+        return (0, 0, 0)
+    
+    year = int(match.group(1))
+    month = int(match.group(2))
+    week_text = match.group(3)
+    week = chinese_to_int(week_text)
+    
+    return (year, month, week)

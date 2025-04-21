@@ -3,6 +3,7 @@ import logging
 from pymongo.errors import DuplicateKeyError
 from pymongo import UpdateOne
 from datetime import datetime, timedelta
+from utils import parse_week_display
 
 logger = logging.getLogger(__name__)
 
@@ -137,8 +138,9 @@ def get_all_latest_attendance_dates(names=None, placeholder_date=None):
             latest_dates = {r["name"]: r["week_display"] for r in results}
             return {name: latest_dates.get(name, None) for name in names}
         else:
-            # Return all latest week_display values if no names provided
-            return sorted(set(r["week_display"] for r in results))
+            # Return all latest week_display values, sorted by parsed week_display
+            weeks = set(r["week_display"] for r in results)
+            return sorted(weeks, key=parse_week_display)
     except Exception as e:
         logger.error(f"Failed to get latest attendance dates: {str(e)}")
         raise

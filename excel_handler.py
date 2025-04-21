@@ -6,7 +6,7 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from config import START_COLUMN, DB_TYPE
-from utils import chinese_to_int, parse_district
+from utils import chinese_to_int, parse_district, parse_week_display
 from database import get_six_month_averages, bulk_write, find_existing, get_all_latest_attendance_dates
 import time
 import logging
@@ -253,6 +253,9 @@ def process_excel(file_stream, file_extension):
         latest_districts = district_counts
         latest_main_district_counts = main_district_counts
 
+    # Sort all_attendance_data by week_display
+    all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))
+
     # Write records to database
     if all_records and all_names:
         week_displays = list(set(r["week_display"] for r in all_records))
@@ -321,6 +324,9 @@ def generate_excel(all_attendance_data):
     workbook = openpyxl.Workbook()
     workbook.remove(workbook.active)
 
+    # Sort all_attendance_data by week_display
+    all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))
+
     for date, data, week_name in all_attendance_data:
         new_sheet_name = f"{week_name} 主日"
 
@@ -330,7 +336,7 @@ def generate_excel(all_attendance_data):
 
         new_sheet = workbook.create_sheet(new_sheet_name)
         previous_week_data = None
-        current_week_idx = next(idx for idx, (d, _, w) in enumerate(all_attendance_data) if w == week_name)
+        current_week_idx = next(idx for idx, (_, _, w) in enumerate(all_attendance_data) if w == week_name)
         if current_week_idx > 0:
             previous_week_data = all_attendance_data[current_week_idx - 1][1]
 
