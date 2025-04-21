@@ -2,7 +2,7 @@ import os
 import subprocess
 import tempfile
 from io import BytesIO
-from datetime import datetime, timedelta
+from datetime import datetime
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from config import START_COLUMN, DB_TYPE
@@ -48,8 +48,8 @@ def convert_xls_to_xlsx(file_stream):
         if os.path.exists(temp_xlsx_path):
             os.remove(temp_xlsx_path)
 
-def classify_attendance(sheet, week_col, week_date):
-    logger.info(f"Classifying attendance for column {week_col}")
+def classify_attendance(sheet, week_col, week_display, placeholder_date):
+    logger.info(f"Classifying attendance for column {week_col}, week_display: {week_display}")
     attended = {}
     not_attended = {}
     district_counts = {}
@@ -78,7 +78,8 @@ def classify_attendance(sheet, week_col, week_date):
 
         records.append({
             "name": name,
-            "date": week_date.strftime('%Y-%m-%d'),
+            "date": placeholder_date.strftime('%Y-%m-%d'),
+            "week_display": week_display,
             "attended": 1 if attendance == 1 else 0,
             "district": district,
             "age_group": effective_age
@@ -99,8 +100,8 @@ def classify_attendance(sheet, week_col, week_date):
     district_counts['總計'] = total_attendance
     return attended, not_attended, district_counts, main_district, main_district_counts, records
 
-def write_summary(new_sheet, attended, not_attended, latest_date, previous_week_data=None):
-    logger.info("Writing Excel summary")
+def write_summary(new_sheet, attended, not_attended, week_display, previous_week_data=None):
+    logger.info(f"Writing Excel summary for {week_display}")
     districts = sorted(set(attended.keys()).union(not_attended.keys()), key=lambda x: (chinese_to_int(x[0]), chinese_to_int(x[3:4])))
     row = 1
 
@@ -129,7 +130,9 @@ def write_summary(new_sheet, attended, not_attended, latest_date, previous_week_
     all_names = set()
     for district in districts:
         all_names.update(attended.get(district, []) + not_attended.get(district, []))
-    avg_rates = get_six_month_averages(list(all_names), latest_date)
+    # Use placeholder date for avg_rates; actual date not critical for summary
+    placeholder_date = datetime.now()
+    avg_rates = get_six_month_averages(list(all_names), placeholder_date)
 
     for i, district in enumerate(districts):
         attended_list = attended.get(district, [])
@@ -144,7 +147,7 @@ def write_summary(new_sheet, attended, not_attended, latest_date, previous_week_
             combined_list.extend((name, True, False) for name in attended_list)
             combined_list.extend((name, False, False) for name in not_attended_list)
 
-        latest_dates = get_all_latest_attendance_dates([name for name, _, _ in combined_list], latest_date)
+        latest_dates = get_all_latest_attendance_dates([name for name, _, _ in combined_list], placeholder_date)
         combined_list.sort(key=lambda x: (-int(x[2]), latest_dates.get(x[0], datetime(1970, 1, 1))), reverse=True)
 
         for r, (name, is_attended, has_highlight) in enumerate(combined_list[:max_len]):
@@ -182,13 +185,13 @@ def process_excel(file_stream, file_extension):
 
     input_sheet = workbook.active
     week_cols = []
-    current_month = "2025年1月"
+    current_month = None
     for col in range(START_COLUMN, input_sheet.max_column + 1):
         month_header = str(input_sheet.cell(1, col + 1).value or "").strip()
         week_header = str(input_sheet.cell(2, col + 1).value or "").strip()
         if "年" in month_header and "月" in month_header:
             current_month = month_header
-        if "週" in week_header:
+        if "週" in week_header and current_month:
             week_cols.append((col, week_header, current_month))
 
     logger.info(f"Detected week columns: {week_cols}")
@@ -205,28 +208,29 @@ def process_excel(file_stream, file_extension):
         }
 
     all_attendance_data = []
-    latest_date = datetime(1970, 1, 1)
+    latest_week = None
     latest_attended = None
     latest_not_attended = None
-    latest_week = None
     latest_districts = None
     latest_main_district = None
     latest_main_district_counts = None
     all_records = []
     all_names = set()
-    date_cache = {}
     existing_cache = set()
 
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
+        # Create placeholder date from month (e.g., 2025年3月 -> 2025-03-01)
         year = int(month_prefix.split("年")[0])
         month_num = int(month_prefix.split("年")[1].replace("月", ""))
-        week_num = chinese_to_int(week_name.replace("第", "").replace("週", ""))
-        current_date = datetime(year, month_num, min(week_num * 7, 28))
+        placeholder_date = datetime(year, month_num, 1)
+        week_display = f"{month_prefix}{week_name}"
 
-        attended, not_attended, district_counts, main_district, main_district_counts, records = classify_attendance(input_sheet, col, current_date)
+        attended, not_attended, district_counts, main_district, main_district_counts, records = classify_attendance(
+            input_sheet, col, week_display, placeholder_date
+        )
         # Filter out existing records in memory
-        records = [r for r in records if (r["name"], r["date"]) not in existing_cache]
+        records = [r for r in records if (r["name"], r["week_display"]) not in existing_cache]
         all_records.extend(records)
         if main_district and not latest_main_district:
             latest_main_district = main_district
@@ -237,46 +241,43 @@ def process_excel(file_stream, file_extension):
             all_names.update(not_attended[district])
 
         if not any(attended.values()):
-            logger.info(f"No attendees for {week_name} in {month_prefix}")
+            logger.info(f"No attendees for {week_display}")
             continue
 
-        all_attendance_data.append((current_date, {'attended': attended, 'not_attended': not_attended}, f"{month_prefix}{week_name}"))
+        all_attendance_data.append((placeholder_date, {'attended': attended, 'not_attended': not_attended}, week_display))
 
-        if current_date > latest_date:
-            latest_date = current_date
-            latest_attended = attended
-            latest_not_attended = not_attended
-            latest_week = f"{month_prefix}{week_name}"
-            latest_districts = district_counts
-            latest_main_district_counts = main_district_counts
+        # The latest week is the last processed column
+        latest_attended = attended
+        latest_not_attended = not_attended
+        latest_week = week_display
+        latest_districts = district_counts
+        latest_main_district_counts = main_district_counts
 
     # Write records to database
     if all_records and all_names:
-        min_date = min(r["date"] for r in all_records)
-        max_date = max(r["date"] for r in all_records)
-        existing_keys = find_existing(min_date, max_date, all_names)
+        existing_keys = find_existing(all_names, [r["week_display"] for r in all_records])
         existing_cache.update(existing_keys)
         
-        new_records = [r for r in all_records if (r["name"], r["date"]) not in existing_cache]
+        new_records = [r for r in all_records if (r["name"], r["week_display"]) not in existing_cache]
         if new_records:
             logger.info(f"Writing {len(new_records)} new records")
             bulk_write(new_records)
 
     # Supplement missing records for the latest week only
-    if latest_date > datetime(1970, 1, 1) and all_names:
+    if latest_week and all_names:
         supplement_start = time.time()
-        latest_week_str = latest_date.strftime("%Y-%m-%d")
-        existing_keys = find_existing(latest_week_str, latest_week_str, all_names)
+        existing_keys = find_existing(all_names, [latest_week])
         existing_cache.update(existing_keys)
 
         missing_records = []
         for name in all_names:
-            if (name, latest_week_str) not in existing_cache:
+            if (name, latest_week) not in existing_cache:
                 district = next((d for d in attended if name in attended.get(d, [])), None) or \
                           next((d for d in not_attended if name in not_attended.get(d, [])), None) or "未知區"
                 missing_records.append({
                     "name": name,
-                    "date": latest_week_str,
+                    "date": datetime.now().strftime("%Y-%m-%d"),  # Current date as placeholder
+                    "week_display": latest_week,
                     "attended": 0,
                     "district": district,
                     "age_group": "未知"
@@ -285,7 +286,7 @@ def process_excel(file_stream, file_extension):
         if missing_records:
             logger.info(f"Writing {len(missing_records)} missing records")
             bulk_write(missing_records)
-            logger.info(f"Bulk wrote {len(missing_records)} missing records for {latest_week_str}")
+            logger.info(f"Bulk wrote {len(missing_records)} missing records for {latest_week}")
 
         supplement_elapsed = time.time() - supplement_start
         logger.info(f"Missing records supplement completed in {supplement_elapsed:.2f}s")
@@ -305,14 +306,13 @@ def process_excel(file_stream, file_extension):
     total_elapsed = time.time() - start_time
     logger.info(f"Excel processing completed in {total_elapsed:.2f}s")
     return {
-        'latest_analytic_date': latest_date.strftime("%Y年%m月%d日") if latest_date > datetime(1970, 1, 1) else None,
+        'latest_analytic_date': datetime.now().strftime("%Y年%m月%d日"),  # Current date as placeholder
         'latest_attendance_data': {'attended': latest_attended, 'not_attended': latest_not_attended} if latest_attended else None,
         'latest_week_display': latest_week,
         'latest_district_counts': latest_districts,
         'latest_main_district': latest_main_district,
         'latest_main_district_counts': latest_main_district_counts,
-        'all_attendance_data': all_attendance_data,
-        'date_cache': date_cache
+        'all_attendance_data': all_attendance_data
     }
 
 def generate_excel(all_attendance_data):
@@ -321,9 +321,7 @@ def generate_excel(all_attendance_data):
     workbook.remove(workbook.active)
 
     for date, data, week_name in all_attendance_data:
-        year = date.year
-        month = date.month
-        new_sheet_name = f"{year}年{month}月{week_name.split('月')[1]} 主日"
+        new_sheet_name = f"{week_name} 主日"
 
         if new_sheet_name in workbook.sheetnames:
             logger.error(f"Duplicate sheet name: {new_sheet_name}")
@@ -331,11 +329,11 @@ def generate_excel(all_attendance_data):
 
         new_sheet = workbook.create_sheet(new_sheet_name)
         previous_week_data = None
-        current_week_idx = next(idx for idx, (d, _, _) in enumerate(all_attendance_data) if d == date)
+        current_week_idx = next(idx for idx, (d, _, w) in enumerate(all_attendance_data) if w == week_name)
         if current_week_idx > 0:
             previous_week_data = all_attendance_data[current_week_idx - 1][1]
 
-        write_summary(new_sheet, data['attended'], data['not_attended'], date, previous_week_data)
+        write_summary(new_sheet, data['attended'], data['not_attended'], week_name, previous_week_data)
 
     output_stream = BytesIO()
     workbook.save(output_stream)

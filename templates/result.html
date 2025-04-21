@@ -58,11 +58,9 @@
 
         $(document).ready(function() {
             $('#weekSelector').on('change', updateTable);
-            // Load task result from sessionStorage
             const taskResult = sessionStorage.getItem('taskResult');
             if (taskResult) {
                 const result = JSON.parse(taskResult);
-                // Store result in session
                 {% for key in ['latest_analytic_date', 'latest_attendance_data', 'latest_week_display', 'latest_district_counts', 'latest_main_district', 'latest_main_district_counts', 'all_attendance_data'] %}
                     sessionStorage.setItem('{{ key }}', JSON.stringify(result['{{ key }}']));
                 {% endfor %}

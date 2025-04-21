@@ -53,7 +53,7 @@
                             if (response.weeks && response.weeks.length > 0) {
                                 var options = '<option value="">請選擇週次</option>';
                                 $.each(response.weeks, function(i, week) {
-                                    options += '<option value="' + week.date + '">' + week.display + '</option>';
+                                    options += '<option value="' + encodeURIComponent(week.date) + '">' + week.display + '</option>';
                                 });
                                 $('#weekSelector').html(options);
                                 $('#weekSelector').prop('disabled', false);
@@ -75,11 +75,11 @@
 
             $('#weekSelector').on('change', function() {
                 var district = $('#districtSelector').val();
-                var weekDate = $(this).val();
-                if (district && weekDate) {
+                var weekDisplay = $(this).val();
+                if (district && weekDisplay) {
                     $('#attendanceTable').html('<p>正在載入數據...</p>');
                     $.ajax({
-                        url: '/get_history_data/' + encodeURIComponent(district) + '/' + encodeURIComponent(weekDate),
+                        url: '/get_history_data/' + encodeURIComponent(district) + '/' + weekDisplay,
                         type: 'GET',
                         success: function(response) {
                             if (response.attendance_table) {

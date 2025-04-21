@@ -9,8 +9,8 @@ def init_database():
     """Initialize database (create collection and indexes)"""
     try:
         indexes = [
-            {"key": [("name", 1), ("date", 1)], "unique": True, "name": "name_date_idx"},
-            {"key": [("date", 1), ("name", 1)], "name": "date_name_idx"}
+            {"key": [("name", 1), ("week_display", 1)], "unique": True, "name": "name_week_idx"},
+            {"key": [("week_display", 1), ("name", 1)], "name": "week_name_idx"}
         ]
         for index in indexes:
             keys = index.pop("key")
@@ -30,6 +30,7 @@ def get_six_month_averages(names, latest_date):
     start_time = time.time()
     result = {}
     
+    # Use placeholder range; actual dates not critical
     six_months_ago = (latest_date - timedelta(days=180)).strftime("%Y-%m-%d")
     latest_date_str = latest_date.strftime("%Y-%m-%d")
     
@@ -81,7 +82,7 @@ def bulk_write(records):
                 logger.warning(f"Insert failed for batch {i//batch_size + 1}: {str(e)}")
                 for r in batch:
                     db[COLLECTION_NAME].update_one(
-                        {"name": r["name"], "date": r["date"]},
+                        {"name": r["name"], "week_display": r["week_display"]},
                         {"$set": r},
                         upsert=True
                     )
@@ -92,19 +93,19 @@ def bulk_write(records):
     elapsed = time.time() - start_time
     logger.info(f"Database write completed in {elapsed:.2f}s")
 
-def find_existing(min_date, max_date, names):
-    """Find existing (name, date) pairs"""
+def find_existing(names, week_displays):
+    """Find existing (name, week_display) pairs"""
     start_time = time.time()
     existing_keys = set()
     try:
         cursor = db[COLLECTION_NAME].find(
             {
-                "date": {"$gte": min_date, "$lte": max_date},
+                "week_display": {"$in": week_displays},
                 "name": {"$in": list(names)}
             },
-            {"name": 1, "date": 1, "_id": 0}
+            {"name": 1, "week_display": 1, "_id": 0}
         )
-        existing_keys = set((doc["name"], doc["date"]) for doc in cursor)
+        existing_keys = set((doc["name"], doc["week_display"]) for doc in cursor)
     except Exception as e:
         logger.error(f"Failed to find existing records: {str(e)}")
     elapsed = time.time() - start_time

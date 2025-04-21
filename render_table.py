@@ -1,8 +1,8 @@
 from config import logger
 from utils import chinese_to_int, parse_district
-from datetime import datetime
 from database import get_six_month_averages
 from excel_handler import get_all_latest_attendance_dates
+from datetime import datetime
 
 def render_stats_table(main_district, district_counts, main_district_counts):
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
@@ -51,13 +51,14 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         return '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
 
     previous_week_data = None
-    all_attendance_data.sort(key=lambda x: x[0])
-    current_week_idx = next((idx for idx, (date, _, week_name) in enumerate(all_attendance_data) if week_name == week_display), None)
+    all_attendance_data.sort(key=lambda x: x[2])  # Sort by week_display
+    current_week_idx = next((idx for idx, (_, _, week_name) in enumerate(all_attendance_data) if week_name == week_display), None)
 
     if current_week_idx is not None and current_week_idx > 0:
         previous_week_data = all_attendance_data[current_week_idx - 1][1]
 
-    latest_date = all_attendance_data[-1][0] if all_attendance_data else datetime.now()
+    # Use placeholder date for latest_dates; actual date not critical
+    placeholder_date = datetime.now()
     main_districts = sorted(set(parse_district(d)[0] for d in districts), key=lambda x: chinese_to_int(x[0]))
     district_groups = {md: [d for d in districts if d.startswith(md)] for md in main_districts}
 
@@ -86,8 +87,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                 combined_list.extend((name, False, False) for name in not_attended_list)
 
             names = [name for name, _, _ in combined_list]
-            latest_dates = get_all_latest_attendance_dates(names, latest_date)
-            # Log sorting inputs for debugging
+            latest_dates = get_all_latest_attendance_dates(names, placeholder_date)
             logger.debug(f"District {district}: Attendance rates {[(name, avg_attendance_rates.get(name, 0.0)) for name in names]}")
             logger.debug(f"District {district}: Highlights {[(name, has_highlight) for name, _, has_highlight in combined_list]}")
             # Sort by highlight status (True first), then attendance rate (descending), then latest date
