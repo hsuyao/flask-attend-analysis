@@ -147,8 +147,8 @@ def write_summary(new_sheet, attended, not_attended, week_display, previous_week
             combined_list.extend((name, True, False) for name in attended_list)
             combined_list.extend((name, False, False) for name in not_attended_list)
 
-        latest_dates = get_all_latest_attendance_dates([name for name, _, _ in combined_list], placeholder_date)
-        combined_list.sort(key=lambda x: (-int(x[2]), latest_dates.get(x[0], datetime(1970, 1, 1))), reverse=True)
+        # Sort by highlight and name (no date-based sorting needed)
+        combined_list.sort(key=lambda x: (-int(x[2]), x[0]))
 
         for r, (name, is_attended, has_highlight) in enumerate(combined_list[:max_len]):
             col_offset = i * 3 + 1
@@ -255,7 +255,8 @@ def process_excel(file_stream, file_extension):
 
     # Write records to database
     if all_records and all_names:
-        existing_keys = find_existing(all_names, [r["week_display"] for r in all_records])
+        week_displays = list(set(r["week_display"] for r in all_records))
+        existing_keys = find_existing(list(all_names), week_displays)
         existing_cache.update(existing_keys)
         
         new_records = [r for r in all_records if (r["name"], r["week_display"]) not in existing_cache]
@@ -266,7 +267,7 @@ def process_excel(file_stream, file_extension):
     # Supplement missing records for the latest week only
     if latest_week and all_names:
         supplement_start = time.time()
-        existing_keys = find_existing(all_names, [latest_week])
+        existing_keys = find_existing(list(all_names), [latest_week])
         existing_cache.update(existing_keys)
 
         missing_records = []
@@ -276,7 +277,7 @@ def process_excel(file_stream, file_extension):
                           next((d for d in not_attended if name in not_attended.get(d, [])), None) or "未知區"
                 missing_records.append({
                     "name": name,
-                    "date": datetime.now().strftime("%Y-%m-%d"),  # Current date as placeholder
+                    "date": datetime.now().strftime("%Y-%m-%d"),
                     "week_display": latest_week,
                     "attended": 0,
                     "district": district,
@@ -306,7 +307,7 @@ def process_excel(file_stream, file_extension):
     total_elapsed = time.time() - start_time
     logger.info(f"Excel processing completed in {total_elapsed:.2f}s")
     return {
-        'latest_analytic_date': datetime.now().strftime("%Y年%m月%d日"),  # Current date as placeholder
+        'latest_analytic_date': datetime.now().strftime("%Y年%m月%d日"),
         'latest_attendance_data': {'attended': latest_attended, 'not_attended': latest_not_attended} if latest_attended else None,
         'latest_week_display': latest_week,
         'latest_district_counts': latest_districts,

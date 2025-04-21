@@ -4,13 +4,13 @@ from io import BytesIO
 import uuid
 import os
 from concurrent.futures import ThreadPoolExecutor
-from excel_handler import process_excel
+from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table
 from database import init_database, get_six_month_averages
+from config import db, COLLECTION_NAME
 from utils import parse_district, chinese_to_int
 from datetime import datetime
 import logging
-import threading
 
 app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
@@ -20,6 +20,18 @@ Session(app)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Log application startup
+logger.info("Starting Flask application")
+
+# Initialize database
+try:
+    init_database()
+    db.command("ping")  # Test MongoDB connection
+    logger.info("Successfully connected to MongoDB")
+except Exception as e:
+    logger.error(f"Failed to initialize database: {str(e)}")
+    raise
 
 # Thread pool for background tasks
 executor = ThreadPoolExecutor(max_workers=2)
@@ -188,7 +200,7 @@ def get_week_data(week_idx):
 
     attendance_table_html = render_attendance_table(
         week_name, attendance_data, all_attendance_data,
-        latest_district_counts, latest_main_district_counts, avg_attendance_rates
+        district_counts, main_district_counts, avg_attendance_rates
     )
 
     return jsonify({'attendance_table': attendance_table_html})
@@ -398,7 +410,6 @@ def get_history_data(district, week_display):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    init_database()
     port = int(os.getenv('PORT', 5000))
     logger.info(f"Starting server on port {port}")
     app.run(debug=False, host='0.0.0.0', port=port)

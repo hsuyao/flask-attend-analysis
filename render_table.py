@@ -1,7 +1,6 @@
 from config import logger
 from utils import chinese_to_int, parse_district
-from database import get_six_month_averages
-from excel_handler import get_all_latest_attendance_dates
+from database import get_six_month_averages, get_all_latest_attendance_dates
 from datetime import datetime
 
 def render_stats_table(main_district, district_counts, main_district_counts):
@@ -95,7 +94,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                 key=lambda x: (
                     -int(x[2]),                           # Primary: highlight (True first)
                     -avg_attendance_rates.get(x[0], 0.0),  # Secondary: descending attendance rate
-                    latest_dates.get(x[0], datetime(1970, 1, 1))  # Tertiary: latest date
+                    latest_dates.get(x[0], '')            # Tertiary: latest week_display (string comparison)
                 )
             )
 

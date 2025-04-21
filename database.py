@@ -1,154 +1,176 @@
-from config import db, COLLECTION_NAME, DB_TYPE
-from datetime import datetime, timedelta
-import time
+from config import db, COLLECTION_NAME
 import logging
+from pymongo.errors import DuplicateKeyError
+from pymongo import UpdateOne
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 def init_database():
-    """Initialize database (create collection and indexes)"""
+    # Check for existing indexes
+    existing_indexes = db[COLLECTION_NAME].index_information()
+    index_name = "name_week_idx"
+    
+    if index_name in existing_indexes:
+        logger.info(f"Index {index_name} already exists, skipping creation")
+        return
+
+    # Check for duplicate records before creating unique index
     try:
-        indexes = [
-            {"key": [("name", 1), ("week_display", 1)], "unique": True, "name": "name_week_idx"},
-            {"key": [("week_display", 1), ("name", 1)], "name": "week_name_idx"}
-        ]
-        for index in indexes:
-            keys = index.pop("key")
-            db[COLLECTION_NAME].create_index(keys, **index)
-            logger.debug(f"Created index: {index.get('name')}")
-        logger.info("Initialized MongoDB with indexes for attendance_records")
-        return db
+        duplicates = db[COLLECTION_NAME].aggregate([
+            {"$group": {
+                "_id": {"name": "$name", "week_display": "$week_display"},
+                "count": {"$sum": 1},
+                "ids": {"$push": "$_id"}
+            }},
+            {"$match": {"count": {"$gt": 1}}}
+        ])
+
+        duplicate_found = False
+        for dup in duplicates:
+            duplicate_found = True
+            ids = dup["ids"][1:]  # Keep the first record, remove others
+            logger.warning(f"Found duplicate records for {dup['_id']}, removing {len(ids)} duplicates")
+            db[COLLECTION_NAME].delete_many({"_id": {"$in": ids}})
+
+        if duplicate_found:
+            logger.info("Duplicate records cleaned up")
+
+        # Create unique index for name and week_display
+        keys = [("name", 1), ("week_display", 1)]
+        index = {"unique": True, "name": index_name}
+        db[COLLECTION_NAME].create_index(keys, **index)
+        logger.info(f"Created unique index {index_name}")
+    except DuplicateKeyError as e:
+        logger.error(f"Failed to create index due to duplicate key: {str(e)}")
+        raise
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")
         raise
 
-def get_six_month_averages(names, latest_date):
-    """Calculate six-month attendance averages"""
-    if not names:
-        return {}
-
-    start_time = time.time()
-    result = {}
-    
-    # Use placeholder range; actual dates not critical
-    six_months_ago = (latest_date - timedelta(days=180)).strftime("%Y-%m-%d")
-    latest_date_str = latest_date.strftime("%Y-%m-%d")
-    
-    batch_size = 100
-    for i in range(0, len(names), batch_size):
-        batch_names = names[i:i + batch_size]
-        try:
-            pipeline = [
-                {"$match": {
-                    "name": {"$in": batch_names},
-                    "date": {"$gte": six_months_ago, "$lte": latest_date_str}
-                }},
-                {"$group": {
-                    "_id": "$name",
-                    "attendance_rate": {"$avg": "$attended"}
-                }},
-                {"$project": {
-                    "_id": 1,
-                    "attendance_rate": {"$ifNull": ["$attendance_rate", 0.0]}
-                }}
-            ]
-            cursor = db[COLLECTION_NAME].aggregate(pipeline)
-            for doc in cursor:
-                result[doc["_id"]] = doc["attendance_rate"]
-        except Exception as e:
-            logger.error(f"Failed to get averages for batch {i//batch_size + 1}: {str(e)}")
-
-    for name in names:
-        if name not in result:
-            result[name] = 0.0
-
-    elapsed = time.time() - start_time
-    logger.info(f"Calculated averages for {len(names)} names in {elapsed:.2f}s")
-    return result
-
 def bulk_write(records):
-    """Bulk write records to database"""
-    if not records:
-        return
-    start_time = time.time()
+    # Perform bulk write operations to insert or update records
     try:
-        batch_size = 5000
-        for i in range(0, len(records), batch_size):
-            batch = records[i:i + batch_size]
-            try:
-                db[COLLECTION_NAME].insert_many(batch, ordered=False)
-                logger.info(f"Inserted {len(batch)} MongoDB records")
-            except Exception as e:
-                logger.warning(f"Insert failed for batch {i//batch_size + 1}: {str(e)}")
-                for r in batch:
-                    db[COLLECTION_NAME].update_one(
-                        {"name": r["name"], "week_display": r["week_display"]},
-                        {"$set": r},
-                        upsert=True
-                    )
-                logger.info(f"Upserted {len(batch)} MongoDB records")
+        operations = []
+        for record in records:
+            if not record.get("name") or not record.get("week_display"):
+                logger.warning(f"Skipping invalid record: {record}")
+                continue
+            # Use upsert to update existing record or insert new one
+            operations.append(UpdateOne(
+                {"name": record["name"], "week_display": record["week_display"]},
+                {"$set": record},
+                upsert=True
+            ))
+        
+        if operations:
+            result = db[COLLECTION_NAME].bulk_write(operations)
+            logger.info(f"Bulk write completed: {result.bulk_api_result}")
+            return result
+        else:
+            logger.info("No valid records to write")
+            return None
     except Exception as e:
-        logger.error(f"Failed to bulk write records: {str(e)}")
+        logger.error(f"Failed to perform bulk write: {str(e)}")
         raise
-    elapsed = time.time() - start_time
-    logger.info(f"Database write completed in {elapsed:.2f}s")
 
-def find_existing(names, week_displays):
-    """Find existing (name, week_display) pairs"""
-    start_time = time.time()
-    existing_keys = set()
+def find_existing(names, week_display):
+    # Find existing records for given names and week_display
     try:
-        cursor = db[COLLECTION_NAME].find(
-            {
-                "week_display": {"$in": week_displays},
-                "name": {"$in": list(names)}
-            },
-            {"name": 1, "week_display": 1, "_id": 0}
-        )
-        existing_keys = set((doc["name"], doc["week_display"]) for doc in cursor)
+        # Ensure names is a list of strings
+        if isinstance(names, set):
+            names = list(names)
+        if not isinstance(names, list):
+            raise ValueError(f"names must be a list, got {type(names)}")
+        if not all(isinstance(name, str) for name in names):
+            raise ValueError("All names must be strings")
+        
+        # Ensure week_display is a list
+        if isinstance(week_display, str):
+            week_display = [week_display]
+        if not isinstance(week_display, list):
+            raise ValueError(f"week_display must be a list, got {type(week_display)}")
+
+        records = db[COLLECTION_NAME].find({
+            "name": {"$in": names},
+            "week_display": {"$in": week_display}
+        })
+        return [(r["name"], r["week_display"]) for r in records]
     except Exception as e:
         logger.error(f"Failed to find existing records: {str(e)}")
-    elapsed = time.time() - start_time
-    logger.debug(f"Found existing records in {elapsed:.2f}s")
-    return existing_keys
+        raise
 
-def get_all_latest_attendance_dates(names, latest_date, cache=None):
-    """Get latest attendance dates for names"""
-    if not names:
-        return {}
-    if cache is None:
-        cache = {}
-    
-    names_to_query = [name for name in names if name not in cache]
-    if not names_to_query:
-        logger.debug(f"Cache hit for all {len(names)} names")
-        return {name: cache[name] for name in names}
-
-    start_time = time.time()
-    latest_dates = {name: datetime(1970, 1, 1) for name in names}
-    
+def get_all_latest_attendance_dates(names=None, placeholder_date=None):
+    # Get latest week_display for each name, optionally filtered by names and date
     try:
-        pipeline = [
-            {"$match": {
-                "name": {"$in": names_to_query},
-                "attended": 1,
-                "date": {"$lte": latest_date.strftime('%Y-%m-%d')}
-            }},
-            {"$sort": {"date": -1}},
+        pipeline = []
+        if names:
+            if isinstance(names, set):
+                names = list(names)
+            if not isinstance(names, list):
+                raise ValueError(f"names must be a list, got {type(names)}")
+            pipeline.append({"$match": {"name": {"$in": names}}})
+        
+        if placeholder_date:
+            # Filter records before or on placeholder_date (approximated by week_display)
+            year = placeholder_date.year
+            month = placeholder_date.month
+            week_num = (placeholder_date.day - 1) // 7 + 1
+            date_filter = f"{year}年{month:02d}月第{week_num}週"
+            pipeline.append({"$match": {"week_display": {"$lte": date_filter}}})
+
+        pipeline.extend([
             {"$group": {
                 "_id": "$name",
-                "max_date": {"$first": "$date"}
+                "latest_week_display": {"$max": "$week_display"}
+            }},
+            {"$project": {
+                "name": "$_id",
+                "week_display": "$latest_week_display",
+                "_id": 0
+            }}
+        ])
+
+        results = db[COLLECTION_NAME].aggregate(pipeline)
+        if names:
+            # Return dictionary for specified names
+            latest_dates = {r["name"]: r["week_display"] for r in results}
+            return {name: latest_dates.get(name, None) for name in names}
+        else:
+            # Return all latest week_display values if no names provided
+            return sorted(set(r["week_display"] for r in results))
+    except Exception as e:
+        logger.error(f"Failed to get latest attendance dates: {str(e)}")
+        raise
+
+def get_six_month_averages(names, end_date):
+    # Calculate six-month attendance averages
+    try:
+        # Ensure names is a list
+        if isinstance(names, set):
+            names = list(names)
+        
+        # Calculate six months ago
+        six_months_ago = end_date - timedelta(days=180)
+        
+        # Convert end_date to week_display format (e.g., "2025年4月第一週")
+        year = six_months_ago.year
+        month = six_months_ago.month
+        week_num = (six_months_ago.day - 1) // 7 + 1
+        week_start = f"{year}年{month:02d}月第{week_num}週"
+        
+        pipeline = [
+            {"$match": {
+                "name": {"$in": names},
+                "week_display": {"$gte": week_start}
+            }},
+            {"$group": {
+                "_id": "$name",
+                "attendance_rate": {"$avg": {"$cond": [{"$eq": ["$attended", 1]}, 1, 0]}}
             }}
         ]
         results = db[COLLECTION_NAME].aggregate(pipeline)
-        for doc in results:
-            if doc["max_date"]:
-                date = datetime.strptime(doc["max_date"], '%Y-%m-%d')
-                latest_dates[doc["_id"]] = date
-                cache[doc["_id"]] = date
+        return {r["_id"]: r["attendance_rate"] for r in results}
     except Exception as e:
-        logger.error(f"Failed to get latest attendance dates: {str(e)}")
-    
-    elapsed = time.time() - start_time
-    logger.debug(f"Retrieved latest dates for {len(names_to_query)} names in {elapsed:.2f}s")
-    return latest_dates
+        logger.error(f"Failed to calculate six-month averages: {str(e)}")
+        return {}
