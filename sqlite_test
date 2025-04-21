@@ -1,2 +1,0 @@
-sqlite3 /app/attendance.db "SELECT date, attended FROM attendance_records WHERE name = 'Phoebe Seto' AND date >= '2024-10-13' AND date <= '2025-04-13' ORDER BY date;"
-
