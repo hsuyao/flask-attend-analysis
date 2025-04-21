@@ -3,53 +3,58 @@ from flask_session import Session
 from io import BytesIO
 import uuid
 import os
-from celery import Celery
-from config import db, COLLECTION_NAME, DB_TYPE
+from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel
-from render_table import render_attendance_table, render_stats_table
+from render_table import render_attendance_table
 from database import init_database, get_six_month_averages
 from utils import parse_district, chinese_to_int
 from datetime import datetime
 import logging
+import threading
 
 app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
-app.config['CELERY_BROKER_URL'] = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-app.config['CELERY_RESULT_BACKEND'] = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 Session(app)
-
-# Configure Celery
-celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
-celery.conf.update(app.config)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Thread pool for background tasks
+executor = ThreadPoolExecutor(max_workers=2)
+tasks = {}  # Store task status and results
+
 def get_version_info():
+    # Read version info from file
     try:
         with open('/app/version_info.txt', 'r') as f:
             return f.read().strip()
     except Exception:
         return "Unknown-Unknown"
 
-@celery.task(bind=True)
-def process_excel_task(self, file_content, file_extension):
-    """Background task to process Excel file"""
-    logger.info("Starting Excel processing task")
+def process_excel_task(file_content, file_extension, task_id):
+    # Process Excel file in background thread
+    logger.info(f"Starting Excel processing task {task_id}")
     buffered_stream = BytesIO(file_content)
     try:
-        self.update_state(state='PROGRESS', meta={'stage': 'Parsing Excel', 'progress': 20})
+        tasks[task_id] = {'state': 'PROGRESS', 'stage': 'Parsing Excel', 'progress': 20}
         result = process_excel(buffered_stream, file_extension)
-        self.update_state(state='PROGRESS', meta={'stage': 'Writing to database', 'progress': 60})
-        self.update_state(state='PROGRESS', meta={'stage': 'Finalizing', 'progress': 90})
-        logger.info("Excel processing task completed successfully")
-        return result
+        tasks[task_id] = {
+            'state': 'SUCCESS', 
+            'stage': 'Completed', 
+            'progress': 100, 
+            'result': result
+        }
+        logger.info(f"Excel processing task {task_id} completed successfully")
     except Exception as e:
-        logger.error(f"Task failed: {str(e)}")
-        self.update_state(state='FAILURE', meta={'stage': 'Error', 'error': str(e)})
-        raise
+        logger.error(f"Task {task_id} failed: {str(e)}")
+        tasks[task_id] = {
+            'state': 'FAILURE', 
+            'stage': 'Error', 
+            'progress': 0, 
+            'error': str(e)
+        }
 
 @app.route('/')
 def index():
@@ -57,6 +62,7 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    # Handle file upload and start background task
     logger.info("Received upload request")
     if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -71,36 +77,32 @@ def upload_file():
 
     file_extension = '.xls' if filename.endswith('.xls') else '.xlsx'
     file_content = file.stream.read()
+    task_id = str(uuid.uuid4())
 
     try:
-        task = process_excel_task.apply_async(args=[file_content, file_extension])
-        logger.info(f"Started Celery task: {task.id}")
-        return jsonify({"task_id": task.id}), 202
+        tasks[task_id] = {'state': 'PENDING', 'stage': 'Waiting', 'progress': 0}
+        executor.submit(process_excel_task, file_content, file_extension, task_id)
+        logger.info(f"Started background task: {task_id}")
+        return jsonify({"task_id": task_id}), 202
     except Exception as e:
         logger.error(f"Failed to start task: {str(e)}")
         return jsonify({"error": f"Task initiation failed: {str(e)}"}), 500
 
 @app.route('/task_status/<task_id>')
 def task_status(task_id):
-    task = process_excel_task.AsyncResult(task_id)
-    if task.state == 'PENDING':
-        response = {'state': task.state, 'stage': 'Waiting', 'progress': 0}
-    elif task.state == 'PROGRESS':
-        response = {'state': task.state, 'stage': task.info.get('stage', 'Processing'), 'progress': task.info.get('progress', 0)}
-    elif task.state == 'SUCCESS':
-        response = {'state': task.state, 'stage': 'Completed', 'progress': 100, 'result': task.get()}
-    elif task.state == 'FAILURE':
-        response = {'state': task.state, 'stage': 'Failed', 'progress': 0, 'error': task.info.get('error', 'Unknown error')}
-    else:
-        response = {'state': task.state, 'stage': 'Unknown', 'progress': 0}
-    logger.debug(f"Task status: {task_id} - {response}")
-    return jsonify(response)
+    # Check status of background task
+    task = tasks.get(task_id, {'state': 'PENDING', 'stage': 'Not Found', 'progress': 0})
+    logger.debug(f"Task status: {task_id} - {task}")
+    return jsonify(task)
 
 @app.route('/task_result/<task_id>')
 def task_result(task_id):
-    task = process_excel_task.AsyncResult(task_id)
-    if task.state == 'SUCCESS':
-        result = task.get()
+    # Retrieve task result and store in session
+    task = tasks.get(task_id)
+    if not task:
+        return jsonify({"status": "error", "error": "Task not found"}), 404
+    if task['state'] == 'SUCCESS':
+        result = task['result']
         logger.info(f"Task {task_id} result: {result}")
         session['latest_attendance_data'] = result.get('latest_attendance_data')
         session['latest_week_display'] = result.get('latest_week_display')
@@ -108,24 +110,23 @@ def task_result(task_id):
         session['latest_main_district_counts'] = result.get('latest_main_district_counts')
         session['all_attendance_data'] = result.get('all_attendance_data')
         session['latest_main_district'] = result.get('latest_main_district')
-        logger.info(f"Session updated with task result: {session.get('latest_attendance_data')}")
+        logger.info(f"Session updated with task result")
         return jsonify({"status": "success", "redirect": url_for('result')})
-    elif task.state == 'FAILURE':
-        logger.error(f"Task {task_id} failed: {task.info.get('error')}")
-        return jsonify({"status": "error", "error": task.info.get('error')}), 500
+    elif task['state'] == 'FAILURE':
+        logger.error(f"Task {task_id} failed: {task['error']}")
+        return jsonify({"status": "error", "error": task['error']}), 500
     else:
         return jsonify({"status": "pending"}), 202
 
 @app.route('/result')
 def result():
+    # Render result page with attendance data
     logger.info(f"Session contents: {session}")
     latest_attendance_data = session.get('latest_attendance_data')
-    logger.info(f"latest_attendance_data: {latest_attendance_data}")
     latest_week_display = session.get('latest_week_display', "No week data")
     latest_district_counts = session.get('latest_district_counts')
     latest_main_district_counts = session.get('latest_main_district_counts')
     all_attendance_data = session.get('all_attendance_data', [])
-    logger.info(f"all_attendance_data length: {len(all_attendance_data)}")
 
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
         logger.error("No valid attendance data found in session")
@@ -162,6 +163,7 @@ def result():
 
 @app.route('/get_week_data/<int:week_idx>')
 def get_week_data(week_idx):
+    # Fetch attendance data for a specific week
     all_attendance_data = session.get('all_attendance_data', [])
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
@@ -186,12 +188,13 @@ def get_week_data(week_idx):
 
     attendance_table_html = render_attendance_table(
         week_name, attendance_data, all_attendance_data,
-        district_counts, main_district_counts, avg_attendance_rates
+        latest_district_counts, latest_main_district_counts, avg_attendance_rates
     )
 
     return jsonify({'attendance_table': attendance_table_html})
 
 def classify_attendance_for_week(week_data):
+    # Classify attendance data for a specific week
     date, data, week_display = week_data
     attended = data['attended']
     not_attended = data['not_attended']
@@ -225,6 +228,7 @@ def classify_attendance_for_week(week_data):
 
 @app.route('/download', methods=['GET'])
 def download_file():
+    # Download processed Excel file
     logger.info("Received download request")
     all_attendance_data = session.get('all_attendance_data', [])
     if not all_attendance_data:
@@ -246,7 +250,7 @@ def download_file():
 
 @app.route('/history')
 def history():
-    """Render history page with available main districts"""
+    # Render history page with available main districts
     try:
         districts = db[COLLECTION_NAME].distinct("district")
         main_districts = sorted(
@@ -269,7 +273,7 @@ def history():
 
 @app.route('/get_weeks_for_district/<district>')
 def get_weeks_for_district(district):
-    """Get available weeks for a given main district with at least one attendance"""
+    # Get available weeks for a given main district
     try:
         pipeline = [
             {"$match": {
@@ -279,7 +283,7 @@ def get_weeks_for_district(district):
             {"$group": {
                 "_id": "$week_display"
             }},
-            {"$sort": {"_id": 1}}  # Sort by week_display
+            {"$sort": {"_id": 1}}
         ]
         weeks = [doc["_id"] for doc in db[COLLECTION_NAME].aggregate(pipeline)]
         logger.info(f"Loaded {len(weeks)} weeks for district {district}")
@@ -290,7 +294,7 @@ def get_weeks_for_district(district):
 
 @app.route('/get_history_data/<district>/<path:week_display>')
 def get_history_data(district, week_display):
-    """Get attendance data for a specific district and week"""
+    # Get attendance data for a specific district and week
     try:
         records = db[COLLECTION_NAME].find({
             "district": {"$regex": f"^{district}"},
@@ -319,12 +323,7 @@ def get_history_data(district, week_display):
             else:
                 not_attended.setdefault(sub_district, []).append(name)
 
-        logger.debug(f"Attended: {attended}")
-        logger.debug(f"Not attended: {not_attended}")
-
-        all_districts = set(attended.keys()).union(not_attended.keys())
-        logger.debug(f"All districts: {all_districts}")
-        for sub_district in all_districts:
+        for sub_district in set(attended.keys()).union(not_attended.keys()):
             district_counts[sub_district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
             main_district_counts[district] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
 
@@ -338,8 +337,6 @@ def get_history_data(district, week_display):
 
         total_attendance = sum(d['total'] for d in district_counts.values())
         district_counts['總計'] = total_attendance
-        logger.debug(f"District counts: {district_counts}")
-        logger.debug(f"Main district counts: {main_district_counts}")
 
         prev_records = db[COLLECTION_NAME].aggregate([
             {"$match": {
@@ -356,7 +353,6 @@ def get_history_data(district, week_display):
         for doc in prev_records:
             prev_week = doc["_id"]
             break
-        logger.debug(f"Previous week for {week_display}: {prev_week}")
 
         prev_attended = set()
         prev_not_attended = set()
@@ -373,14 +369,12 @@ def get_history_data(district, week_display):
                     prev_attended.add((record["district"], record["name"]))
                 else:
                     prev_not_attended.add((record["district"], record["name"]))
-            logger.debug(f"Previous week attended: {prev_attended}")
-            logger.debug(f"Previous week not attended: {prev_not_attended}")
 
         attendance_data = {'attended': attended, 'not_attended': not_attended}
         all_attendance_data = [(datetime.now(), attendance_data, week_display)]
         prev_attendance_data = {
-            'attended': {k: [n for d, n in prev_attended if d == k] for k in all_districts},
-            'not_attended': {k: [n for d, n in prev_not_attended if d == k] for k in all_districts}
+            'attended': {k: [n for d, n in prev_attended if d == k] for k in set(attended.keys()).union(not_attended.keys())},
+            'not_attended': {k: [n for d, n in prev_not_attended if d == k] for k in set(attended.keys()).union(not_attended.keys())}
         }
         if prev_week and (prev_attended or prev_not_attended):
             all_attendance_data.insert(0, (datetime.now(), prev_attendance_data, prev_week))
@@ -391,7 +385,6 @@ def get_history_data(district, week_display):
         for sub_district in not_attended:
             all_names.update(not_attended[sub_district])
         avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
-        logger.debug(f"Average attendance rates: {avg_attendance_rates}")
 
         attendance_table_html = render_attendance_table(
             week_display, attendance_data, all_attendance_data,
@@ -403,10 +396,6 @@ def get_history_data(district, week_display):
     except Exception as e:
         logger.error(f"Failed to get history data for {district} on {week_display}: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-def chinese_to_int_reverse(num):
-    numeral_map = {1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '七', 8: '八', 9: '九', 10: '十'}
-    return numeral_map.get(num, str(num))
 
 if __name__ == '__main__':
     init_database()

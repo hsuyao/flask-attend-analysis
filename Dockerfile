@@ -1,20 +1,20 @@
-# 使用 Python 3.8 作為基礎映像
+# Use Python 3.8 as the base image
 FROM python:3.8-slim
 
-# 安裝系統依賴，包括 LibreOffice、Redis 和 supervisord
+# Install system dependencies, including LibreOffice and Redis
 RUN apt-get update && \
-    apt-get install -y libreoffice redis-server supervisor && \
+    apt-get install -y libreoffice redis-server && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# 設定工作目錄
+# Set working directory
 WORKDIR /app
 
-# 複製並安裝 Python 依賴
+# Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 複製應用程式程式碼
+# Copy application code
 COPY . .
 
 # Generate version_info.txt during build
@@ -24,11 +24,8 @@ RUN if [ -d .git ]; then \
         echo "custom-$(date -u +%Y%m%d%H%M%S)" > /app/version_info.txt; \
     fi
 
-# 複製 supervisord 配置文件
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# 暴露 Flask 應用端口
+# Expose Flask application port
 EXPOSE 5000
 
-# 使用 supervisord 作為容器啟動命令
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Start Gunicorn and Redis
+CMD redis-server --port 6379 & gunicorn --bind 0.0.0.0:5000 --workers=1 --threads=4 app:app
