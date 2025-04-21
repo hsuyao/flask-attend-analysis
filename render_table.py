@@ -55,6 +55,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
 
     if current_week_idx is not None and current_week_idx > 0:
         previous_week_data = all_attendance_data[current_week_idx - 1][1]
+        logger.debug(f"Previous week data for {week_display}: {previous_week_data}")
 
     # Use placeholder date for latest_dates; actual date not critical
     placeholder_date = datetime.now()
@@ -79,6 +80,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             if previous_week_data:
                 prev_attended = previous_week_data['attended'].get(district, [])
                 prev_not_attended = previous_week_data['not_attended'].get(district, [])
+                logger.debug(f"District {district}: prev_attended={prev_attended}, prev_not_attended={prev_not_attended}")
                 combined_list.extend((name, True, name in prev_not_attended) for name in attended_list)
                 combined_list.extend((name, False, name in prev_attended) for name in not_attended_list)
             else:

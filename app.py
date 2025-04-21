@@ -316,6 +316,12 @@ def get_history_data(district, week_display):
         records_list = list(records)
         logger.debug(f"Fetched {len(records_list)} records for {district} on {week_display}")
 
+        if not records_list:
+            logger.warning(f"No records found for {district} on {week_display}")
+            return jsonify({
+                'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
+            }), 404
+
         attended = {}
         not_attended = {}
         district_counts = {}
@@ -353,33 +359,37 @@ def get_history_data(district, week_display):
 
         # Get all week_displays before the current one, sorted by parsed week_display
         all_weeks = db[COLLECTION_NAME].distinct("week_display", {
-            "district": {"$regex": f"^{district}"},
-            "week_display": {"$lt": week_display}
+            "district": {"$regex": f"^{district}"}
         })
+        all_weeks = [w for w in all_weeks if parse_week_display(w) < parse_week_display(week_display)]
         all_weeks.sort(key=parse_week_display, reverse=True)
         prev_week = all_weeks[0] if all_weeks else None
+        logger.debug(f"Previous week for {week_display}: {prev_week}, available weeks: {all_weeks}")
 
-        prev_attended = set()
-        prev_not_attended = set()
+        prev_attended = {}
+        prev_not_attended = {}
         if prev_week:
             prev_records = db[COLLECTION_NAME].find({
                 "district": {"$regex": f"^{district}"},
                 "week_display": prev_week
             })
             for record in prev_records:
+                sub_district = record["district"]
+                name = record["name"]
                 attended_status = record.get("attended")
                 if isinstance(attended_status, str):
                     attended_status = int(attended_status)
                 if attended_status == 1:
-                    prev_attended.add((record["district"], record["name"]))
+                    prev_attended.setdefault(sub_district, []).append(name)
                 else:
-                    prev_not_attended.add((record["district"], record["name"]))
+                    prev_not_attended.setdefault(sub_district, []).append(name)
+            logger.debug(f"Previous week {prev_week} data: attended={prev_attended}, not_attended={prev_not_attended}")
 
         attendance_data = {'attended': attended, 'not_attended': not_attended}
         all_attendance_data = [(datetime.now(), attendance_data, week_display)]
         prev_attendance_data = {
-            'attended': {k: [n for d, n in prev_attended if d == k] for k in set(attended.keys()).union(not_attended.keys())},
-            'not_attended': {k: [n for d, n in prev_not_attended if d == k] for k in set(attended.keys()).union(not_attended.keys())}
+            'attended': prev_attended,
+            'not_attended': prev_not_attended
         }
         if prev_week and (prev_attended or prev_not_attended):
             all_attendance_data.insert(0, (datetime.now(), prev_attendance_data, prev_week))
