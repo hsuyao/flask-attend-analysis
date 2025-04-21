@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table
-from database import init_database, get_six_month_averages
+from database import init_database, get_six_month_averages, get_event_name
 from config import db, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
@@ -122,6 +122,7 @@ def task_result(task_id):
         session['latest_main_district_counts'] = result.get('latest_main_district_counts')
         session['all_attendance_data'] = result.get('all_attendance_data')
         session['latest_main_district'] = result.get('latest_main_district')
+        session['event_name'] = result.get('event_name')
         logger.info(f"Session updated with task result")
         return jsonify({"status": "success", "redirect": url_for('result')})
     elif task['state'] == 'FAILURE':
@@ -139,6 +140,7 @@ def result():
     latest_district_counts = session.get('latest_district_counts')
     latest_main_district_counts = session.get('latest_main_district_counts')
     all_attendance_data = session.get('all_attendance_data', [])
+    event_name = session.get('event_name', "未指定活動")
 
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
         logger.error("No valid attendance data found in session")
@@ -159,10 +161,11 @@ def result():
 
     attendance_table_html = render_attendance_table(
         latest_week_display, latest_attendance_data, all_attendance_data,
-        latest_district_counts, latest_main_district_counts, avg_attendance_rates
+        latest_district_counts, latest_main_district_counts, avg_attendance_rates,
+        event_name=event_name
     )
 
-    week_options = [(week_name, idx) for idx, (_, _, week_name) in enumerate(all_attendance_data)]
+    week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(all_attendance_data)]
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
@@ -183,7 +186,7 @@ def get_week_data(week_idx):
         }), 400
 
     all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
-    date, attendance_data, week_name = all_attendance_data[week_idx]
+    date, attendance_data, week_name, event_name = all_attendance_data[week_idx]
     latest_main_district = session.get('latest_main_district', '')
     _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(all_attendance_data[week_idx])
     if not main_district:
@@ -201,14 +204,15 @@ def get_week_data(week_idx):
 
     attendance_table_html = render_attendance_table(
         week_name, attendance_data, all_attendance_data,
-        district_counts, main_district_counts, avg_attendance_rates
+        district_counts, main_district_counts, avg_attendance_rates,
+        event_name=event_name
     )
 
     return jsonify({'attendance_table': attendance_table_html})
 
 def classify_attendance_for_week(week_data):
     # Classify attendance data for a specific week
-    date, data, week_display = week_data
+    date, data, week_display, event_name = week_data
     attended = data['attended']
     not_attended = data['not_attended']
     main_district = None
@@ -386,13 +390,13 @@ def get_history_data(district, week_display):
             logger.debug(f"Previous week {prev_week} data: attended={prev_attended}, not_attended={prev_not_attended}")
 
         attendance_data = {'attended': attended, 'not_attended': not_attended}
-        all_attendance_data = [(datetime.now(), attendance_data, week_display)]
+        all_attendance_data = [(datetime.now(), attendance_data, week_display, None)]
         prev_attendance_data = {
             'attended': prev_attended,
             'not_attended': prev_not_attended
         }
         if prev_week and (prev_attended or prev_not_attended):
-            all_attendance_data.insert(0, (datetime.now(), prev_attendance_data, prev_week))
+            all_attendance_data.insert(0, (datetime.now(), prev_attendance_data, prev_week, None))
 
         all_names = set()
         for sub_district in attended:
@@ -401,9 +405,13 @@ def get_history_data(district, week_display):
             all_names.update(not_attended[sub_district])
         avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
 
+        # Get event name from database
+        event_name = get_event_name(week_display)
+
         attendance_table_html = render_attendance_table(
             week_display, attendance_data, all_attendance_data,
-            district_counts, main_district_counts, avg_attendance_rates
+            district_counts, main_district_counts, avg_attendance_rates,
+            event_name=event_name
         )
 
         logger.info(f"Rendered history data for {district} on {week_display}")

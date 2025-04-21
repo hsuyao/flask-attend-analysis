@@ -3,7 +3,7 @@ from utils import chinese_to_int, parse_district, parse_week_display
 from database import get_six_month_averages, get_all_latest_attendance_dates
 from datetime import datetime
 
-def render_stats_table(main_district, district_counts, main_district_counts):
+def render_stats_table(main_district, district_counts, main_district_counts, event_name="未指定活動"):
     age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
     stats_districts = sorted(
         [d for d in district_counts.keys() if d != '總計'],
@@ -15,7 +15,7 @@ def render_stats_table(main_district, district_counts, main_district_counts):
         return '<div class="table-wrapper stats-wrapper flex-item"><p>無統計資料</p></div>'
 
     html = '<div class="table-wrapper stats-wrapper flex-item">\n<table class="excel-table">\n'
-    html += f'<tr class="header"><th></th>'
+    html += f'<tr class="header"><th>{event_name}</th>'
     districts = [main_district] + sub_districts
     for district in districts:
         html += f'<th>{district}</th>'
@@ -37,7 +37,7 @@ def render_stats_table(main_district, district_counts, main_district_counts):
     html += '</tr>\n</table>\n</div>\n'
     return html
 
-def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, district_counts, main_district_counts, avg_attendance_rates=None):
+def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, district_counts, main_district_counts, avg_attendance_rates=None, event_name="未指定活動"):
     if avg_attendance_rates is None:
         avg_attendance_rates = {}
 
@@ -51,7 +51,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
 
     previous_week_data = None
     all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
-    current_week_idx = next((idx for idx, (_, _, week_name) in enumerate(all_attendance_data) if week_name == week_display), None)
+    current_week_idx = next((idx for idx, (_, _, week_name, _) in enumerate(all_attendance_data) if week_name == week_display), None)
 
     if current_week_idx is not None and current_week_idx > 0:
         previous_week_data = all_attendance_data[current_week_idx - 1][1]
@@ -136,7 +136,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             html += '</tr>\n'
         html += '</table>\n</div>\n'
 
-        html += render_stats_table(main_district, district_counts, main_district_counts)
+        html += render_stats_table(main_district, district_counts, main_district_counts, event_name)
         html += '</div>\n</div>\n'
 
     if not html:

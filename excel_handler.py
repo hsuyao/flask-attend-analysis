@@ -48,8 +48,8 @@ def convert_xls_to_xlsx(file_stream):
         if os.path.exists(temp_xlsx_path):
             os.remove(temp_xlsx_path)
 
-def classify_attendance(sheet, week_col, week_display, placeholder_date):
-    logger.info(f"Classifying attendance for column {week_col}, week_display: {week_display}")
+def classify_attendance(sheet, week_col, week_display, placeholder_date, event_name):
+    logger.info(f"Classifying attendance for column {week_col}, week_display: {week_display}, event_name: {event_name}")
     attended = {}
     not_attended = {}
     district_counts = {}
@@ -82,7 +82,8 @@ def classify_attendance(sheet, week_col, week_display, placeholder_date):
             "week_display": week_display,
             "attended": 1 if attendance == 1 else 0,
             "district": district,
-            "age_group": effective_age
+            "age_group": effective_age,
+            "event_name": event_name
         })
 
         if attendance == 1:
@@ -184,6 +185,10 @@ def process_excel(file_stream, file_extension):
         raise
 
     input_sheet = workbook.active
+    # Extract event name from cell A1
+    event_name = str(input_sheet.cell(1, 1).value or "未指定活動").strip()
+    logger.info(f"Extracted event name: {event_name}")
+
     week_cols = []
     current_month = None
     for col in range(START_COLUMN, input_sheet.max_column + 1):
@@ -204,7 +209,8 @@ def process_excel(file_stream, file_extension):
             'latest_district_counts': None,
             'latest_main_district': None,
             'latest_main_district_counts': None,
-            'all_attendance_data': []
+            'all_attendance_data': [],
+            'event_name': event_name
         }
 
     all_attendance_data = []
@@ -227,7 +233,7 @@ def process_excel(file_stream, file_extension):
         week_display = f"{month_prefix}{week_name}"
 
         attended, not_attended, district_counts, main_district, main_district_counts, records = classify_attendance(
-            input_sheet, col, week_display, placeholder_date
+            input_sheet, col, week_display, placeholder_date, event_name
         )
         # Filter out existing records in memory
         records = [r for r in records if (r["name"], r["week_display"]) not in existing_cache]
@@ -244,7 +250,7 @@ def process_excel(file_stream, file_extension):
             logger.info(f"No attendees for {week_display}")
             continue
 
-        all_attendance_data.append((placeholder_date, {'attended': attended, 'not_attended': not_attended}, week_display))
+        all_attendance_data.append((placeholder_date, {'attended': attended, 'not_attended': not_attended}, week_display, event_name))
 
         # The latest week is the last processed column
         latest_attended = attended
@@ -284,7 +290,8 @@ def process_excel(file_stream, file_extension):
                     "week_display": latest_week,
                     "attended": 0,
                     "district": district,
-                    "age_group": "未知"
+                    "age_group": "未知",
+                    "event_name": event_name
                 })
 
         if missing_records:
@@ -304,7 +311,8 @@ def process_excel(file_stream, file_extension):
             'latest_district_counts': None,
             'latest_main_district': None,
             'latest_main_district_counts': None,
-            'all_attendance_data': []
+            'all_attendance_data': [],
+            'event_name': event_name
         }
 
     total_elapsed = time.time() - start_time
@@ -316,7 +324,8 @@ def process_excel(file_stream, file_extension):
         'latest_district_counts': latest_districts,
         'latest_main_district': latest_main_district,
         'latest_main_district_counts': latest_main_district_counts,
-        'all_attendance_data': all_attendance_data
+        'all_attendance_data': all_attendance_data,
+        'event_name': event_name
     }
 
 def generate_excel(all_attendance_data):
@@ -327,7 +336,7 @@ def generate_excel(all_attendance_data):
     # Sort all_attendance_data by week_display
     all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))
 
-    for date, data, week_name in all_attendance_data:
+    for date, data, week_name, event_name in all_attendance_data:
         new_sheet_name = f"{week_name} 主日"
 
         if new_sheet_name in workbook.sheetnames:
@@ -336,7 +345,7 @@ def generate_excel(all_attendance_data):
 
         new_sheet = workbook.create_sheet(new_sheet_name)
         previous_week_data = None
-        current_week_idx = next(idx for idx, (_, _, w) in enumerate(all_attendance_data) if w == week_name)
+        current_week_idx = next(idx for idx, (_, _, w, _) in enumerate(all_attendance_data) if w == week_name)
         if current_week_idx > 0:
             previous_week_data = all_attendance_data[current_week_idx - 1][1]
 

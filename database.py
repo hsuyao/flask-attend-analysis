@@ -176,3 +176,14 @@ def get_six_month_averages(names, end_date):
     except Exception as e:
         logger.error(f"Failed to calculate six-month averages: {str(e)}")
         return {}
+
+def get_event_name(week_display):
+    # Get the event name associated with a specific week_display
+    try:
+        record = db[COLLECTION_NAME].find_one({"week_display": week_display}, {"event_name": 1})
+        event_name = record.get("event_name", "未指定活動") if record else "未指定活動"
+        logger.debug(f"Retrieved event name for {week_display}: {event_name}")
+        return event_name
+    except Exception as e:
+        logger.error(f"Failed to get event name for {week_display}: {str(e)}")
+        return "未指定活動"
