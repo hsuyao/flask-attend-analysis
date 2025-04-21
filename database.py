@@ -14,40 +14,49 @@ def init_database():
     
     if index_name in existing_indexes:
         logger.info(f"Index {index_name} already exists, skipping creation")
-        return
+    else:
+        # Check for duplicate records before creating unique index
+        try:
+            duplicates = db[COLLECTION_NAME].aggregate([
+                {"$group": {
+                    "_id": {"name": "$name", "week_display": "$week_display"},
+                    "count": {"$sum": 1},
+                    "ids": {"$push": "$_id"}
+                }},
+                {"$match": {"count": {"$gt": 1}}}
+            ])
 
-    # Check for duplicate records before creating unique index
+            duplicate_found = False
+            for dup in duplicates:
+                duplicate_found = True
+                ids = dup["ids"][1:]  # Keep the first record, remove others
+                logger.warning(f"Found duplicate records for {dup['_id']}, removing {len(ids)} duplicates")
+                db[COLLECTION_NAME].delete_many({"_id": {"$in": ids}})
+
+            if duplicate_found:
+                logger.info("Duplicate records cleaned up")
+
+            # Create unique index for name and week_display
+            keys = [("name", 1), ("week_display", 1)]
+            index = {"unique": True, "name": index_name}
+            db[COLLECTION_NAME].create_index(keys, **index)
+            logger.info(f"Created unique index {index_name}")
+        except DuplicateKeyError as e:
+            logger.error(f"Failed to create index due to duplicate key: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {str(e)}")
+            raise
+
+    # Set default event_name for existing records without event_name
     try:
-        duplicates = db[COLLECTION_NAME].aggregate([
-            {"$group": {
-                "_id": {"name": "$name", "week_display": "$week_display"},
-                "count": {"$sum": 1},
-                "ids": {"$push": "$_id"}
-            }},
-            {"$match": {"count": {"$gt": 1}}}
-        ])
-
-        duplicate_found = False
-        for dup in duplicates:
-            duplicate_found = True
-            ids = dup["ids"][1:]  # Keep the first record, remove others
-            logger.warning(f"Found duplicate records for {dup['_id']}, removing {len(ids)} duplicates")
-            db[COLLECTION_NAME].delete_many({"_id": {"$in": ids}})
-
-        if duplicate_found:
-            logger.info("Duplicate records cleaned up")
-
-        # Create unique index for name and week_display
-        keys = [("name", 1), ("week_display", 1)]
-        index = {"unique": True, "name": index_name}
-        db[COLLECTION_NAME].create_index(keys, **index)
-        logger.info(f"Created unique index {index_name}")
-    except DuplicateKeyError as e:
-        logger.error(f"Failed to create index due to duplicate key: {str(e)}")
-        raise
+        result = db[COLLECTION_NAME].update_many(
+            {"event_name": {"$exists": False}},
+            {"$set": {"event_name": "未指定活動"}}
+        )
+        logger.info(f"Updated {result.modified_count} records with default event_name")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {str(e)}")
-        raise
+        logger.error(f"Failed to set default event_name: {str(e)}")
 
 def bulk_write(records):
     # Perform bulk write operations to insert or update records
@@ -180,8 +189,15 @@ def get_six_month_averages(names, end_date):
 def get_event_name(week_display):
     # Get the event name associated with a specific week_display
     try:
-        record = db[COLLECTION_NAME].find_one({"week_display": week_display}, {"event_name": 1})
-        event_name = record.get("event_name", "未指定活動") if record else "未指定活動"
+        logger.debug(f"Querying event name for week_display: {week_display}")
+        record = db[COLLECTION_NAME].find_one(
+            {"week_display": week_display},
+            {"event_name": 1}
+        )
+        if not record:
+            logger.warning(f"No record found for week_display: {week_display}")
+            return "未指定活動"
+        event_name = record.get("event_name", "未指定活動")
         logger.debug(f"Retrieved event name for {week_display}: {event_name}")
         return event_name
     except Exception as e:

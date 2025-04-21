@@ -407,6 +407,7 @@ def get_history_data(district, week_display):
 
         # Get event name from database
         event_name = get_event_name(week_display)
+        logger.debug(f"Event name for {week_display} in district {district}: {event_name}")
 
         attendance_table_html = render_attendance_table(
             week_display, attendance_data, all_attendance_data,
