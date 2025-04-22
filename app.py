@@ -5,7 +5,7 @@ import uuid
 import os
 from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel, generate_excel
-from render_table import render_attendance_table
+from render_table import render_attendance_table, render_stats_table
 from database import init_database, get_six_month_averages, get_event_name, get_event_totals
 from config import db, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
@@ -45,28 +45,54 @@ def get_version_info():
     except Exception:
         return "Unknown-Unknown"
 
-def process_excel_task(file_content, file_extension, task_id):
-    # Process Excel file in background thread
+def process_excel_task(file_contents, file_extensions, task_id):
+    # Process multiple Excel files in background thread
     logger.info(f"Starting Excel processing task {task_id}")
-    buffered_stream = BytesIO(file_content)
-    try:
-        tasks[task_id] = {'state': 'PROGRESS', 'stage': 'Parsing Excel', 'progress': 20}
+    combined_result = {
+        'latest_analytic_date': None,
+        'latest_attendance_data': None,
+        'latest_week_display': None,
+        'latest_district_counts': None,
+        'latest_main_district': None,
+        'latest_main_district_counts': None,
+        'all_attendance_data': [],
+        'event_name': "未指定活動"
+    }
+    
+    for idx, (file_content, file_extension) in enumerate(zip(file_contents, file_extensions)):
+        buffered_stream = BytesIO(file_content)
+        tasks[task_id] = {'state': 'PROGRESS', 'stage': f'Parsing Excel File {idx + 1}', 'progress': 20 + (idx * 20)}
         result = process_excel(buffered_stream, file_extension)
-        tasks[task_id] = {
-            'state': 'SUCCESS', 
-            'stage': 'Completed', 
-            'progress': 100, 
-            'result': result
-        }
-        logger.info(f"Excel processing task {task_id} completed successfully")
-    except Exception as e:
-        logger.error(f"Task {task_id} failed: {str(e)}")
-        tasks[task_id] = {
-            'state': 'FAILURE', 
-            'stage': 'Error', 
-            'progress': 0, 
-            'error': str(e)
-        }
+        
+        # Merge results
+        if result['latest_attendance_data']:
+            if not combined_result['latest_attendance_data'] or parse_week_display(result['latest_week_display']) > parse_week_display(combined_result['latest_week_display'] or ''):
+                combined_result['latest_analytic_date'] = result['latest_analytic_date']
+                combined_result['latest_attendance_data'] = result['latest_attendance_data']
+                combined_result['latest_week_display'] = result['latest_week_display']
+                combined_result['latest_district_counts'] = result['latest_district_counts']
+                combined_result['latest_main_district'] = result['latest_main_district']
+                combined_result['latest_main_district_counts'] = result['latest_main_district_counts']
+                combined_result['event_name'] = result['event_name']
+        
+        combined_result['all_attendance_data'].extend(result['all_attendance_data'])
+    
+    # Remove duplicates and sort
+    seen_weeks = set()
+    unique_attendance_data = []
+    for item in sorted(combined_result['all_attendance_data'], key=lambda x: parse_week_display(x[2])):
+        if item[2] not in seen_weeks:
+            seen_weeks.add(item[2])
+            unique_attendance_data.append(item)
+    combined_result['all_attendance_data'] = unique_attendance_data
+
+    tasks[task_id] = {
+        'state': 'SUCCESS', 
+        'stage': 'Completed', 
+        'progress': 100, 
+        'result': combined_result
+    }
+    logger.info(f"Excel processing task {task_id} completed successfully")
 
 @app.route('/')
 def index():
@@ -74,26 +100,28 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    # Handle file upload and start background task
+    # Handle multiple file uploads and start background task
     logger.info("Received upload request")
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+    file_keys = ['file1', 'file2', 'file3', 'file4']
+    files = []
+    file_extensions = []
+    
+    for key in file_keys:
+        if key in request.files and request.files[key].filename:
+            file = request.files[key]
+            filename = file.filename.lower()
+            if not filename.endswith(('.xls', '.xlsx')):
+                return jsonify({"error": f"File {filename}: Only .xls and .xlsx files supported"}), 400
+            files.append(file.stream.read())
+            file_extensions.append('.xls' if filename.endswith('.xls') else '.xlsx')
+    
+    if not files:
+        return jsonify({"error": "No files selected"}), 400
 
-    file = request.files['file']
-    if not file or file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
-
-    filename = file.filename.lower()
-    if not filename.endswith(('.xls', '.xlsx')):
-        return jsonify({"error": "Only .xls and .xlsx files supported"}), 400
-
-    file_extension = '.xls' if filename.endswith('.xls') else '.xlsx'
-    file_content = file.stream.read()
     task_id = str(uuid.uuid4())
-
     try:
         tasks[task_id] = {'state': 'PENDING', 'stage': 'Waiting', 'progress': 0}
-        executor.submit(process_excel_task, file_content, file_extension, task_id)
+        executor.submit(process_excel_task, files, file_extensions, task_id)
         logger.info(f"Started background task: {task_id}")
         return jsonify({"task_id": task_id}), 202
     except Exception as e:
@@ -133,7 +161,7 @@ def task_result(task_id):
 
 @app.route('/result')
 def result():
-    # Render result page with attendance data
+    # Render result page with attendance and stats data, prioritizing 主日
     logger.info(f"Session contents: {session}")
     latest_attendance_data = session.get('latest_attendance_data')
     latest_week_display = session.get('latest_week_display', "No week data")
@@ -141,6 +169,7 @@ def result():
     latest_main_district_counts = session.get('latest_main_district_counts')
     all_attendance_data = session.get('all_attendance_data', [])
     event_name = session.get('event_name', "未指定活動")
+    latest_main_district = session.get('latest_main_district', '')
 
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
         logger.error("No valid attendance data found in session")
@@ -149,36 +178,63 @@ def result():
     all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
     placeholder_date = datetime.now()
 
+    # Find 主日 data or fall back to the first file's data
+    sunday_data = None
+    for idx, (date, data, week_name, evt_name) in enumerate(all_attendance_data):
+        if evt_name == "主日":
+            sunday_data = (idx, date, data, week_name, evt_name)
+            break
+    if not sunday_data and all_attendance_data:
+        # Fallback to the first file's data
+        sunday_data = (0, all_attendance_data[0][0], all_attendance_data[0][1], all_attendance_data[0][2], all_attendance_data[0][3])
+
+    if not sunday_data:
+        logger.error("No 主日 or fallback data found")
+        return render_template('index.html', error="No 主日 or fallback data available", version=get_version_info())
+
+    sunday_idx, sunday_date, sunday_attendance_data, sunday_week_display, sunday_event_name = sunday_data
+    sunday_district_counts = latest_district_counts
+    sunday_main_district_counts = latest_main_district_counts
+    sunday_main_district = latest_main_district
+
+    if sunday_idx != len(all_attendance_data) - 1:
+        # Recalculate counts for the selected week if not the latest
+        _, sunday_district_counts, _, sunday_main_district, sunday_main_district_counts = classify_attendance_for_week(all_attendance_data[sunday_idx])
+
     all_names = set()
-    for district in latest_attendance_data['attended']:
-        all_names.update(latest_attendance_data['attended'][district])
-    for district in latest_attendance_data['not_attended']:
-        all_names.update(latest_attendance_data['not_attended'][district])
+    for district in sunday_attendance_data['attended']:
+        all_names.update(sunday_attendance_data['attended'][district])
+    for district in sunday_attendance_data['not_attended']:
+        all_names.update(sunday_attendance_data['not_attended'][district])
     avg_attendance_rates = session.get('avg_attendance_rates')
     if not avg_attendance_rates:
         avg_attendance_rates = get_six_month_averages(list(all_names), placeholder_date)
         session['avg_attendance_rates'] = avg_attendance_rates
 
+    # Get event totals for the selected week
+    event_totals = get_event_totals(sunday_week_display, sunday_main_district)
+
     attendance_table_html = render_attendance_table(
-        latest_week_display, latest_attendance_data, all_attendance_data,
-        latest_district_counts, latest_main_district_counts, avg_attendance_rates,
-        event_name=event_name
+        sunday_week_display, sunday_attendance_data, all_attendance_data,
+        sunday_district_counts, sunday_main_district_counts, avg_attendance_rates,
+        event_name=sunday_event_name,
+        is_history_page=True,  # Use history page layout
+        event_totals=event_totals
     )
 
     week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(all_attendance_data)]
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
-        stats_table_html="",
         has_file_stream=True,
         week_options=week_options,
-        selected_week_idx=len(all_attendance_data) - 1 if all_attendance_data else 0,
+        selected_week_idx=sunday_idx,
         version=get_version_info()
     )
 
 @app.route('/get_week_data/<int:week_idx>')
 def get_week_data(week_idx):
-    # Fetch attendance data for a specific week
+    # Fetch attendance data for a specific week, prioritizing 主日 for stats
     all_attendance_data = session.get('all_attendance_data', [])
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
@@ -202,10 +258,15 @@ def get_week_data(week_idx):
         avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
         session['avg_attendance_rates'] = avg_attendance_rates
 
+    # Get event totals for the selected week
+    event_totals = get_event_totals(week_name, main_district)
+
     attendance_table_html = render_attendance_table(
         week_name, attendance_data, all_attendance_data,
         district_counts, main_district_counts, avg_attendance_rates,
-        event_name=event_name
+        event_name=event_name,
+        is_history_page=True,  # Use history page layout
+        event_totals=event_totals
     )
 
     return jsonify({'attendance_table': attendance_table_html})
@@ -220,7 +281,7 @@ def classify_attendance_for_week(week_data):
     main_district_counts = {}
     age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
 
-    records = db[COLLECTION_NAME].find({"week_display": week_display})
+    records = db[COLLECTION_NAME].find({"week_display": week_display, "event_name": event_name})
     age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
 
     for district in set(attended.keys()).union(not_attended.keys()):
