@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def init_database():
     # Check for existing indexes
     existing_indexes = db[COLLECTION_NAME].index_information()
-    index_name = "name_week_idx"
+    index_name = "name_week_event_idx"
     
     if index_name in existing_indexes:
         logger.info(f"Index {index_name} already exists, skipping creation")
@@ -19,7 +19,7 @@ def init_database():
         try:
             duplicates = db[COLLECTION_NAME].aggregate([
                 {"$group": {
-                    "_id": {"name": "$name", "week_display": "$week_display"},
+                    "_id": {"name": "$name", "week_display": "$week_display", "event_name": "$event_name"},
                     "count": {"$sum": 1},
                     "ids": {"$push": "$_id"}
                 }},
@@ -36,8 +36,8 @@ def init_database():
             if duplicate_found:
                 logger.info("Duplicate records cleaned up")
 
-            # Create unique index for name and week_display
-            keys = [("name", 1), ("week_display", 1)]
+            # Create unique index for name, week_display, and event_name
+            keys = [("name", 1), ("week_display", 1), ("event_name", 1)]
             index = {"unique": True, "name": index_name}
             db[COLLECTION_NAME].create_index(keys, **index)
             logger.info(f"Created unique index {index_name}")
@@ -63,12 +63,16 @@ def bulk_write(records):
     try:
         operations = []
         for record in records:
-            if not record.get("name") or not record.get("week_display"):
+            if not record.get("name") or not record.get("week_display") or not record.get("event_name"):
                 logger.warning(f"Skipping invalid record: {record}")
                 continue
             # Use upsert to update existing record or insert new one
             operations.append(UpdateOne(
-                {"name": record["name"], "week_display": record["week_display"]},
+                {
+                    "name": record["name"],
+                    "week_display": record["week_display"],
+                    "event_name": record["event_name"]
+                },
                 {"$set": record},
                 upsert=True
             ))
@@ -84,8 +88,8 @@ def bulk_write(records):
         logger.error(f"Failed to perform bulk write: {str(e)}")
         raise
 
-def find_existing(names, week_display):
-    # Find existing records for given names and week_display
+def find_existing(names, week_display, event_names=None):
+    # Find existing records for given names, week_display, and optional event_names
     try:
         # Ensure names is a list of strings
         if isinstance(names, set):
@@ -101,11 +105,15 @@ def find_existing(names, week_display):
         if not isinstance(week_display, list):
             raise ValueError(f"week_display must be a list, got {type(week_display)}")
 
-        records = db[COLLECTION_NAME].find({
+        query = {
             "name": {"$in": names},
             "week_display": {"$in": week_display}
-        })
-        return [(r["name"], r["week_display"]) for r in records]
+        }
+        if event_names:
+            query["event_name"] = {"$in": event_names}
+
+        records = db[COLLECTION_NAME].find(query)
+        return [(r["name"], r["week_display"], r["event_name"]) for r in records]
     except Exception as e:
         logger.error(f"Failed to find existing records: {str(e)}")
         raise

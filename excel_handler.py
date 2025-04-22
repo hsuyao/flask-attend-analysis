@@ -265,10 +265,10 @@ def process_excel(file_stream, file_extension):
     # Write records to database
     if all_records and all_names:
         week_displays = list(set(r["week_display"] for r in all_records))
-        existing_keys = find_existing(list(all_names), week_displays)
-        existing_cache.update(existing_keys)
+        existing_keys = find_existing(list(all_names), week_displays, event_names=[event_name])
+        existing_cache.update((name, week, evt) for name, week, evt in existing_keys)
         
-        new_records = [r for r in all_records if (r["name"], r["week_display"]) not in existing_cache]
+        new_records = [r for r in all_records if (r["name"], r["week_display"], r["event_name"]) not in existing_cache]
         if new_records:
             logger.info(f"Writing {len(new_records)} new records")
             bulk_write(new_records)
@@ -276,12 +276,12 @@ def process_excel(file_stream, file_extension):
     # Supplement missing records for the latest week only
     if latest_week and all_names:
         supplement_start = time.time()
-        existing_keys = find_existing(list(all_names), [latest_week])
-        existing_cache.update(existing_keys)
+        existing_keys = find_existing(list(all_names), [latest_week], event_names=[event_name])
+        existing_cache.update((name, week, evt) for name, week, evt in existing_keys)
 
         missing_records = []
         for name in all_names:
-            if (name, latest_week) not in existing_cache:
+            if (name, latest_week, event_name) not in existing_cache:
                 district = next((d for d in attended if name in attended.get(d, [])), None) or \
                           next((d for d in not_attended if name in not_attended.get(d, [])), None) or "未知區"
                 missing_records.append({
