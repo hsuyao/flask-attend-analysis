@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table
-from database import init_database, get_six_month_averages, get_event_name
+from database import init_database, get_six_month_averages, get_event_name, get_event_totals
 from config import db, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
@@ -218,7 +218,7 @@ def classify_attendance_for_week(week_data):
     main_district = None
     district_counts = {}
     main_district_counts = {}
-    age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+    age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
 
     records = db[COLLECTION_NAME].find({"week_display": week_display})
     age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
@@ -315,13 +315,14 @@ def get_history_data(district, week_display):
     try:
         records = db[COLLECTION_NAME].find({
             "district": {"$regex": f"^{district}"},
-            "week_display": week_display
+            "week_display": week_display,
+            "event_name": "主日"  # Ensure only 主日 records for main table
         })
         records_list = list(records)
-        logger.debug(f"Fetched {len(records_list)} records for {district} on {week_display}")
+        logger.debug(f"Fetched {len(records_list)} records for {district} on {week_display} with event_name: 主日")
 
         if not records_list:
-            logger.warning(f"No records found for {district} on {week_display}")
+            logger.warning(f"No records found for {district} on {week_display} with event_name: 主日")
             return jsonify({
                 'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
             }), 404
@@ -330,7 +331,7 @@ def get_history_data(district, week_display):
         not_attended = {}
         district_counts = {}
         main_district_counts = {}
-        age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+        age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
         age_mapping = {}
 
         for record in records_list:
@@ -363,7 +364,8 @@ def get_history_data(district, week_display):
 
         # Get all week_displays before the current one, sorted by parsed week_display
         all_weeks = db[COLLECTION_NAME].distinct("week_display", {
-            "district": {"$regex": f"^{district}"}
+            "district": {"$regex": f"^{district}"},
+            "event_name": "主日"
         })
         all_weeks = [w for w in all_weeks if parse_week_display(w) < parse_week_display(week_display)]
         all_weeks.sort(key=parse_week_display, reverse=True)
@@ -375,7 +377,8 @@ def get_history_data(district, week_display):
         if prev_week:
             prev_records = db[COLLECTION_NAME].find({
                 "district": {"$regex": f"^{district}"},
-                "week_display": prev_week
+                "week_display": prev_week,
+                "event_name": "主日"
             })
             for record in prev_records:
                 sub_district = record["district"]
@@ -405,14 +408,18 @@ def get_history_data(district, week_display):
             all_names.update(not_attended[sub_district])
         avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
 
-        # Get event name from database
+        # Get event name and event totals from database
         event_name = get_event_name(week_display)
+        event_totals = get_event_totals(week_display, district)
         logger.debug(f"Event name for {week_display} in district {district}: {event_name}")
+        logger.info(f"Passing event_totals to render for {week_display}, {district}: {event_totals}")
 
         attendance_table_html = render_attendance_table(
             week_display, attendance_data, all_attendance_data,
             district_counts, main_district_counts, avg_attendance_rates,
-            event_name=event_name
+            event_name=event_name,
+            is_history_page=True,
+            event_totals=event_totals
         )
 
         logger.info(f"Rendered history data for {district} on {week_display}")

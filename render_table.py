@@ -3,8 +3,8 @@ from utils import chinese_to_int, parse_district, parse_week_display
 from database import get_six_month_averages, get_all_latest_attendance_dates
 from datetime import datetime
 
-def render_stats_table(main_district, district_counts, main_district_counts, event_name="未指定活動"):
-    age_categories = ['青職以上', '大專', '中學', '大學', '小學', '學齡前']
+def render_stats_table(main_district, district_counts, main_district_counts, event_name="未指定活動", is_history_page=False, event_totals=None):
+    age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
     stats_districts = sorted(
         [d for d in district_counts.keys() if d != '總計'],
         key=parse_district
@@ -34,10 +34,30 @@ def render_stats_table(main_district, district_counts, main_district_counts, eve
         total = main_district_counts.get(district, {'total': 0}).get('total', 0) if district == main_district else \
                 district_counts.get(district, {'total': 0}).get('total', 0)
         html += f'<td>{total}</td>'
-    html += '</tr>\n</table>\n</div>\n'
+    html += '</tr>\n'
+
+    if is_history_page and event_totals is not None:
+        logger.debug(f"Rendering event totals for main_district: {main_district}, event_totals: {event_totals}")
+        # Add spacer row for 0.25 line spacing
+        html += '<tr class="spacer"><td colspan="{}"></td></tr>\n'.format(len(districts) + 1)
+        
+        # Add rows for 禱告, 晨興, 小排 if they have data
+        for event in ["禱告", "晨興", "小排"]:
+            total = event_totals.get(event, {}).get("total", 0)
+            if total > 0:
+                html += f'<tr class="event-row"><td>{event}</td>'
+                for district in districts:
+                    count = total if district == main_district else \
+                            event_totals[event]["districts"].get(district, 0)
+                    html += f'<td>{count}</td>'
+                html += '</tr>\n'
+            else:
+                logger.debug(f"Skipping event {event} for {main_district}: total count is {total}")
+
+    html += '</table>\n</div>\n'
     return html
 
-def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, district_counts, main_district_counts, avg_attendance_rates=None, event_name="未指定活動"):
+def render_attendance_table(week_display, latest_attendance_data, all_attendance_data, district_counts, main_district_counts, avg_attendance_rates=None, event_name="未指定活動", is_history_page=False, event_totals=None):
     if avg_attendance_rates is None:
         avg_attendance_rates = {}
 
@@ -136,7 +156,7 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             html += '</tr>\n'
         html += '</table>\n</div>\n'
 
-        html += render_stats_table(main_district, district_counts, main_district_counts, event_name)
+        html += render_stats_table(main_district, district_counts, main_district_counts, event_name, is_history_page, event_totals)
         html += '</div>\n</div>\n'
 
     if not html:

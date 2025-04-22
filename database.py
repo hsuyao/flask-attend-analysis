@@ -203,3 +203,58 @@ def get_event_name(week_display):
     except Exception as e:
         logger.error(f"Failed to get event name for {week_display}: {str(e)}")
         return "未指定活動"
+
+def get_event_totals(week_display, main_district):
+    # Get total attendance counts for '禱告', '小排', '晨興' for a specific week_display and main_district
+    try:
+        logger.debug(f"Querying event totals for week_display: {week_display}, main_district: {main_district}")
+        pipeline = [
+            {"$match": {
+                "week_display": week_display,
+                "district": {"$regex": f"^{main_district}"},
+                "attended": 1,
+                "event_name": {"$in": ["禱告", "小排", "晨興"]}
+            }},
+            {"$group": {
+                "_id": {
+                    "event_name": "$event_name",
+                    "district": "$district"
+                },
+                "count": {"$sum": 1}
+            }},
+            {"$group": {
+                "_id": "$_id.event_name",
+                "district_counts": {
+                    "$push": {
+                        "district": "$_id.district",
+                        "count": "$count"
+                    }
+                },
+                "total_count": {"$sum": "$count"}
+            }}
+        ]
+        results = list(db[COLLECTION_NAME].aggregate(pipeline))
+        logger.debug(f"Raw query results for {week_display}, {main_district}: {results}")
+        
+        event_totals = {
+            "禱告": {"total": 0, "districts": {}},
+            "小排": {"total": 0, "districts": {}},
+            "晨興": {"total": 0, "districts": {}}
+        }
+        
+        for result in results:
+            event_name = result["_id"]
+            if event_name in event_totals:
+                event_totals[event_name]["total"] = result["total_count"]
+                for dc in result["district_counts"]:
+                    event_totals[event_name]["districts"][dc["district"]] = dc["count"]
+        
+        logger.info(f"Event totals for {week_display}, {main_district}: {event_totals}")
+        return event_totals
+    except Exception as e:
+        logger.error(f"Failed to get event totals for {week_display}, {main_district}: {str(e)}")
+        return {
+            "禱告": {"total": 0, "districts": {}},
+            "小排": {"total": 0, "districts": {}},
+            "晨興": {"total": 0, "districts": {}}
+        }

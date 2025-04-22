@@ -1,14 +1,80 @@
+/* General Styles */
 body {
     font-family: Arial, sans-serif;
     margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 20px auto;
     padding: 20px;
-    box-sizing: border-box;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+h2 {
+    text-align: center;
+    color: #333;
 }
 
 .table-container {
+    margin-top: 20px;
+}
+
+.excel-table {
     width: 100%;
-    max-width: 618px; /* 匹配固定容器宽度 */
-    margin: 0 auto;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.excel-table th, .excel-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+}
+
+.excel-table th {
+    background-color: #107C10;
+    color: white;
+    font-weight: bold;
+}
+
+.excel-table .header th {
+    background-color: #107C10;
+}
+
+.excel-table .district-row th {
+    background-color: #5DBB63;
+    color: white;
+}
+
+.excel-table .subheader th {
+    background-color: #5DBB63;
+    color: white;
+}
+
+.excel-table .even {
+    background-color: #f9f9f9;
+}
+
+.excel-table .odd {
+    background-color: #ffffff;
+}
+
+.excel-table .total-row {
+    font-weight: bold;
+    background-color: #e0e0e0;
+}
+
+.excel-table .highlight-green {
+    background-color: #90EE90;
+}
+
+.excel-table .highlight-red {
+    background-color: #FFB6C1;
 }
 
 .district-section {
@@ -16,179 +82,130 @@ body {
 }
 
 .district-container {
-    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
 .flex-container {
     display: flex;
-    flex-wrap: nowrap; /* 防止换行 */
-    width: 618px; /* 468px 出席 + 130px 统计 + 20px 间距 */
-    margin: 0 auto;
+    flex-wrap: wrap;
     gap: 20px;
-    justify-content: center;
+}
+
+.flex-item {
+    flex: 1;
+    min-width: 300px;
 }
 
 .table-wrapper {
-    text-align: left;
+    overflow-x: auto;
 }
 
-.attendance-wrapper {
-    width: 468px; /* 固定出席表格宽度，6 列 × 78px */
-    max-height: 70vh; /* 限制高度以启用垂直滚动 */
-    flex: none; /* 移除 Flex 缩放 */
-    overflow-x: auto; /* 水平滚动条 */
-    overflow-y: auto; /* 垂直滚动条 */
-}
-
-.stats-wrapper {
-    width: 160px; /* 固定统计表格宽度，100px + 50px */
-    flex: none; /* 移除 Flex 缩放 */
-}
-
-.excel-table {
-    border-collapse: collapse;
-    margin-bottom: 20px;
-    font-family: Arial, sans-serif;
-    font-size: 14px;
-}
-
-.attendance-wrapper .excel-table {
-    width: 468px; /* 确保表格宽度固定 */
-}
-
-.stats-wrapper .excel-table {
-    width: 160px; /* 确保表格宽度固定 */
-}
-
-.excel-table th,
-.excel-table td {
-    border: 1px solid #000;
-    padding: 2px;
-    text-align: left;
-    vertical-align: top;
-    line-height: 1.2;
-    font-size: 14px;
-}
-
-.attendance-wrapper .excel-table th,
-.attendance-wrapper .excel-table td {
-    width: 78px; /* 每列固定 78px，对齐“二大區一區” */
-}
-
-.stats-wrapper .excel-table th:first-child,
-.stats-wrapper .excel-table td:first-child {
-    width: 120px; /* 第一列（区名/年龄）固定 100px */
-}
-
-.stats-wrapper .excel-table th:nth-child(2),
-.stats-wrapper .excel-table td:nth-child(2) {
-    width: 40px; /* 第二列（人数）固定 40px */
-}
-
-.title-row th {
-    background-color: #1C2526;
-    color: white;
-    text-align: center;
-    font-weight: bold;
-    padding: 2px;
-    line-height: 1.2;
-}
-
-.header {
-    background-color: #2F4F4F;
-    color: white;
-    font-weight: bold;
-    padding: 2px;
-    line-height: 1.2;
-}
-
-.district-row th {
-    background-color: #4682B4;
-    color: white;
-    text-align: center;
-    padding: 2px;
-    line-height: 1.2;
-}
-
-.subheader th {
-    background-color: #5F9EA0;
-    color: white;
-    padding: 2px;
-    line-height: 1.2;
-}
-
-.even {
-    background-color: #F3F2F1;
-    color: black;
-}
-
-.odd {
-    background-color: #FFFFFF;
-    color: black;
-}
-
-.total-row {
-    background-color: #B0E0E6;
-    color: black;
-    font-weight: bold;
-}
-
-.main-district-row {
-    background-color: #ADD8E6; /* 大区行使用稍深的背景色 */
-    font-weight: bold;
-}
-
-.highlight-green {
-    background-color: #90EE90 !important;
-}
-
-.highlight-red {
-    background-color: #FFB6C1 !important;
-}
-
-.week-selector-container {
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.week-selector {
-    padding: 5px;
-    font-size: 16px;
-    background-color: #f0f0f0;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+.attendance-wrapper, .stats-wrapper {
+    flex: 1;
 }
 
 .button-container {
     text-align: center;
-    margin: 10px 0;
+    margin-top: 20px;
 }
 
 .button {
     display: inline-block;
-    padding: 8px 16px;
-    margin: 10px 5px;
-    background-color: #1C2526;
+    padding: 10px 20px;
+    background-color: #107C10;
     color: white;
     text-decoration: none;
-    border: none;
-    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.3s;
 }
 
 .button:hover {
-    background-color: #0F1414;
+    background-color: #0a5f0a;
 }
 
-h2 {
-    text-align: center !important;
-    font-size: 20px;
+.week-selector-container {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.upload-form {
+.week-selector {
+    padding: 8px;
+    font-size: 16px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+}
+
+/* Progress Bar */
+.progress-container {
+    width: 100%;
+    max-width: 600px;
+    margin: 20px auto;
     text-align: center;
-    margin: 20px 0;
 }
 
-.upload-input {
-    margin-right: 10px;
+.progress-bar {
+    width: 100%;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-fill {
+    height: 20px;
+    background-color: #107C10;
+    width: 0%;
+    transition: width 0.3s;
+}
+
+.progress-text {
+    margin-top: 10px;
+    font-size: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+
+    .excel-table th, .excel-table td {
+        padding: 6px;
+        font-size: 14px;
+    }
+
+    .week-selector-container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .week-selector {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .district-container {
+        flex-direction: column;
+    }
+
+    .flex-item {
+        min-width: 100%;
+    }
+}
+
+/* Spacer row for 0.25 line spacing */
+.excel-table .spacer {
+    height: 0.25em;
+    background: none;
+    border: none;
+}
+
+/* Event rows for 禱告, 晨興, 小排 */
+.excel-table .event-row {
+    background-color: #f0f8ff;
+    font-weight: normal;
 }
