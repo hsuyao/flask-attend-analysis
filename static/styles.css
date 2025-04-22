@@ -2,13 +2,14 @@
 body {
     font-family: Arial, sans-serif;
     margin: 0;
-    padding: 0;
+    padding: 20px;
     background-color: #f4f4f4;
+    box-sizing: border-box;
 }
 
 .container {
-    max-width: 1200px;
-    margin: 20px auto;
+    max-width: 618px; /* Match fixed container width from uploaded CSS */
+    margin: 0 auto;
     padding: 20px;
     background: #fff;
     border-radius: 8px;
@@ -16,113 +17,175 @@ body {
 }
 
 h2 {
-    text-align: center;
+    text-align: center !important;
     color: #333;
+    font-size: 20px; /* Match uploaded CSS */
 }
 
 .table-container {
+    width: 100%;
+    max-width: 618px; /* Match fixed container width */
+    margin: 0 auto;
     margin-top: 20px;
 }
 
 .excel-table {
-    width: 100%;
     border-collapse: collapse;
     margin-bottom: 20px;
+    font-family: Arial, sans-serif;
+    font-size: 14px; /* Match uploaded CSS */
 }
 
-.excel-table th, .excel-table td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: center;
+.excel-table th,
+.excel-table td {
+    border: 1px solid #000; /* Match uploaded CSS */
+    padding: 2px; /* Match uploaded CSS */
+    text-align: left; /* Match uploaded CSS */
+    vertical-align: top; /* Match uploaded CSS */
+    line-height: 1.2; /* Match uploaded CSS */
+    font-size: 14px; /* Match uploaded CSS */
 }
 
 .excel-table th {
-    background-color: #107C10;
+    background-color: #2F4F4F; /* Header color from uploaded CSS */
     color: white;
     font-weight: bold;
 }
 
 .excel-table .header th {
-    background-color: #107C10;
+    background-color: #2F4F4F; /* Match uploaded CSS */
+    color: white;
+    font-weight: bold;
+    padding: 2px;
+    line-height: 1.2;
 }
 
 .excel-table .district-row th {
-    background-color: #5DBB63;
+    background-color: #4682B4; /* Match uploaded CSS */
     color: white;
+    text-align: center; /* Match uploaded CSS */
+    padding: 2px;
+    line-height: 1.2;
 }
 
 .excel-table .subheader th {
-    background-color: #5DBB63;
+    background-color: #5F9EA0; /* Match uploaded CSS */
     color: white;
+    padding: 2px;
+    line-height: 1.2;
 }
 
 .excel-table .even {
-    background-color: #f9f9f9;
+    background-color: #F3F2F1; /* Match uploaded CSS */
+    color: black;
 }
 
 .excel-table .odd {
-    background-color: #ffffff;
+    background-color: #FFFFFF; /* Match uploaded CSS */
+    color: black;
 }
 
 .excel-table .total-row {
+    background-color: #B0E0E6; /* Match uploaded CSS */
+    color: black;
     font-weight: bold;
-    background-color: #e0e0e0;
 }
 
 .excel-table .highlight-green {
-    background-color: #90EE90;
+    background-color: #90EE90 !important; /* Match uploaded CSS */
 }
 
 .excel-table .highlight-red {
-    background-color: #FFB6C1;
+    background-color: #FFB6C1 !important; /* Match uploaded CSS */
 }
 
 .district-section {
-    margin-bottom: 40px;
+    margin-bottom: 40px; /* Match uploaded CSS */
 }
 
 .district-container {
     display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+    flex-wrap: nowrap; /* Prevent wrapping, match uploaded CSS */
+    width: 618px; /* Match uploaded CSS: 468px attendance + 130px stats + 20px gap */
+    margin: 0 auto;
+    gap: 20px; /* Match uploaded CSS */
+    justify-content: center; /* Match uploaded CSS */
 }
 
 .flex-container {
     display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
+    flex-wrap: nowrap; /* Match uploaded CSS */
+    width: 618px; /* Match uploaded CSS */
+    margin: 0 auto;
+    gap: 20px; /* Match uploaded CSS */
+    justify-content: center; /* Match uploaded CSS */
 }
 
 .flex-item {
-    flex: 1;
-    min-width: 300px;
+    flex: none; /* Match uploaded CSS: no flex scaling */
 }
 
 .table-wrapper {
-    overflow-x: auto;
+    text-align: left; /* Match uploaded CSS */
+    overflow-x: auto; /* Match uploaded CSS */
 }
 
-.attendance-wrapper, .stats-wrapper {
-    flex: 1;
+.attendance-wrapper {
+    width: 468px; /* Match uploaded CSS: 6 columns × 78px */
+    max-height: 70vh; /* Match uploaded CSS */
+    flex: none; /* Match uploaded CSS */
+    overflow-x: auto; /* Match uploaded CSS */
+    overflow-y: auto; /* Match uploaded CSS */
+}
+
+.attendance-wrapper .excel-table {
+    width: 468px; /* Ensure fixed table width, match uploaded CSS */
+}
+
+.attendance-wrapper .excel-table th,
+.attendance-wrapper .excel-table td {
+    width: 78px; /* Match uploaded CSS: 468px / 6 columns */
+}
+
+.stats-wrapper {
+    width: 160px; /* Match uploaded CSS: 100px + 50px */
+    flex: none; /* Match uploaded CSS */
+}
+
+.stats-wrapper .excel-table {
+    width: 160px; /* Ensure fixed table width, match uploaded CSS */
+}
+
+.stats-wrapper .excel-table th:first-child,
+.stats-wrapper .excel-table td:first-child {
+    width: 120px; /* Match uploaded CSS: first column (age/event) */
+}
+
+.stats-wrapper .excel-table th:nth-child(n+2),
+.stats-wrapper .excel-table td:nth-child(n+2) {
+    width: 40px; /* Match uploaded CSS: subsequent columns (counts) */
 }
 
 .button-container {
     text-align: center;
-    margin-top: 20px;
+    margin: 10px 0; /* Match uploaded CSS */
 }
 
 .button {
     display: inline-block;
-    padding: 10px 20px;
-    background-color: #107C10;
+    padding: 8px 16px; /* Match uploaded CSS */
+    margin: 10px 5px; /* Match uploaded CSS */
+    background-color: #1C2526; /* Match uploaded CSS */
     color: white;
     text-decoration: none;
-    border-radius: 5px;
+    border: none; /* Match uploaded CSS */
+    border-radius: 4px; /* Match uploaded CSS */
+    cursor: pointer; /* Match uploaded CSS */
     transition: background-color 0.3s;
 }
 
 .button:hover {
-    background-color: #0a5f0a;
+    background-color: #0F1414; /* Match uploaded CSS */
 }
 
 .week-selector-container {
@@ -130,13 +193,15 @@ h2 {
     display: flex;
     align-items: center;
     gap: 10px;
+    text-align: center; /* Match uploaded CSS */
 }
 
 .week-selector {
-    padding: 8px;
-    font-size: 16px;
-    border-radius: 5px;
-    border: 1px solid #ccc;
+    padding: 5px; /* Match uploaded CSS */
+    font-size: 16px; /* Match uploaded CSS */
+    background-color: #f0f0f0; /* Match uploaded CSS */
+    border: 1px solid #ccc; /* Match uploaded CSS */
+    border-radius: 4px; /* Match uploaded CSS */
 }
 
 /* Progress Bar */
@@ -157,7 +222,7 @@ h2 {
 
 .progress-fill {
     height: 20px;
-    background-color: #107C10;
+    background-color: #1C2526; /* Match uploaded CSS for button color */
     width: 0%;
     transition: width 0.3s;
 }
@@ -165,36 +230,6 @@ h2 {
 .progress-text {
     margin-top: 10px;
     font-size: 16px;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-    .container {
-        padding: 10px;
-    }
-
-    .excel-table th, .excel-table td {
-        padding: 6px;
-        font-size: 14px;
-    }
-
-    .week-selector-container {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .week-selector {
-        width: 100%;
-        margin-bottom: 10px;
-    }
-
-    .district-container {
-        flex-direction: column;
-    }
-
-    .flex-item {
-        min-width: 100%;
-    }
 }
 
 /* Spacer row for 0.25 line spacing */
@@ -206,6 +241,46 @@ h2 {
 
 /* Event rows for 禱告, 晨興, 小排 */
 .excel-table .event-row {
-    background-color: #f0f8ff;
+    background-color: #f0f8ff; /* Keep original light blue for event rows */
     font-weight: normal;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+        max-width: 100%; /* Adjust for smaller screens */
+    }
+
+    .flex-container,
+    .district-container {
+        width: 100%;
+        flex-direction: column; /* Stack tables on small screens */
+    }
+
+    .attendance-wrapper,
+    .stats-wrapper {
+        width: 100%; /* Full width on small screens */
+    }
+
+    .attendance-wrapper .excel-table,
+    .stats-wrapper .excel-table {
+        width: 100%; /* Full width tables */
+    }
+
+    .excel-table th,
+    .excel-table td {
+        padding: 2px;
+        font-size: 12px; /* Slightly smaller font for mobile */
+    }
+
+    .week-selector-container {
+        flex-direction: column;
+        align-items: center; /* Center align on mobile */
+    }
+
+    .week-selector {
+        width: 100%;
+        margin-bottom: 10px;
+    }
 }
