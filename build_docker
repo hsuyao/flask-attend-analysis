@@ -1,1 +1,5 @@
+if docker images attendance-app:latest | grep -q attendance-app; then
+  docker rmi attendance-app:latest
+fi
+
 docker build -t attendance-app .
