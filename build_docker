@@ -1,1 +1,9 @@
+# Step 1: Tag current latest as v1
+if docker image inspect attendance-app:latest > /dev/null 2>&1; then
+  docker tag attendance-app:latest attendance-app:v1 && \
+  docker rmi attendance-app:latest
+fi
+
+# Step 2: Build new image as latest
 docker build -t attendance-app .
+
