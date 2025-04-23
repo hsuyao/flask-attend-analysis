@@ -175,18 +175,19 @@ def result():
         logger.error("No valid attendance data found in session")
         return render_template('index.html', error="No valid attendance data", version=get_version_info())
 
-    all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
+    # Sort all_attendance_data in descending order and keep it consistent
+    sorted_attendance_data = sorted(all_attendance_data, key=lambda x: parse_week_display(x[2]), reverse=True)
     placeholder_date = datetime.now()
 
-    # Find 主日 data or fall back to the first file's data
+    # Find 主日 data or fall back to the first file's data in sorted order
     sunday_data = None
-    for idx, (date, data, week_name, evt_name) in enumerate(all_attendance_data):
+    for idx, (date, data, week_name, evt_name) in enumerate(sorted_attendance_data):
         if evt_name == "主日":
             sunday_data = (idx, date, data, week_name, evt_name)
             break
-    if not sunday_data and all_attendance_data:
+    if not sunday_data and sorted_attendance_data:
         # Fallback to the first file's data
-        sunday_data = (0, all_attendance_data[0][0], all_attendance_data[0][1], all_attendance_data[0][2], all_attendance_data[0][3])
+        sunday_data = (0, sorted_attendance_data[0][0], sorted_attendance_data[0][1], sorted_attendance_data[0][2], sorted_attendance_data[0][3])
 
     if not sunday_data:
         logger.error("No 主日 or fallback data found")
@@ -197,9 +198,8 @@ def result():
     sunday_main_district_counts = latest_main_district_counts
     sunday_main_district = latest_main_district
 
-    if sunday_idx != len(all_attendance_data) - 1:
-        # Recalculate counts for the selected week if not the latest
-        _, sunday_district_counts, _, sunday_main_district, sunday_main_district_counts = classify_attendance_for_week(all_attendance_data[sunday_idx])
+    # Recalculate counts for the selected week
+    _, sunday_district_counts, _, sunday_main_district, sunday_main_district_counts = classify_attendance_for_week(sorted_attendance_data[sunday_idx])
 
     all_names = set()
     for district in sunday_attendance_data['attended']:
@@ -215,14 +215,15 @@ def result():
     event_totals = get_event_totals(sunday_week_display, sunday_main_district)
 
     attendance_table_html = render_attendance_table(
-        sunday_week_display, sunday_attendance_data, all_attendance_data,
+        sunday_week_display, sunday_attendance_data, sorted_attendance_data,
         sunday_district_counts, sunday_main_district_counts, avg_attendance_rates,
         event_name=sunday_event_name,
         is_history_page=True,  # Use history page layout
         event_totals=event_totals
     )
 
-    week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(all_attendance_data)]
+    # Generate week options from sorted data
+    week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(sorted_attendance_data)]
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
@@ -241,10 +242,11 @@ def get_week_data(week_idx):
             'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>No data</th></tr></table></div>'
         }), 400
 
-    all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))  # Sort by parsed week_display
-    date, attendance_data, week_name, event_name = all_attendance_data[week_idx]
+    # Sort in descending order to match week_options
+    sorted_attendance_data = sorted(all_attendance_data, key=lambda x: parse_week_display(x[2]), reverse=True)
+    date, attendance_data, week_name, event_name = sorted_attendance_data[week_idx]
     latest_main_district = session.get('latest_main_district', '')
-    _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(all_attendance_data[week_idx])
+    _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(sorted_attendance_data[week_idx])
     if not main_district:
         main_district = latest_main_district
 
@@ -262,7 +264,7 @@ def get_week_data(week_idx):
     event_totals = get_event_totals(week_name, main_district)
 
     attendance_table_html = render_attendance_table(
-        week_name, attendance_data, all_attendance_data,
+        week_name, attendance_data, sorted_attendance_data,
         district_counts, main_district_counts, avg_attendance_rates,
         event_name=event_name,
         is_history_page=True,  # Use history page layout
@@ -363,7 +365,7 @@ def get_weeks_for_district(district):
             }}
         ]
         weeks = [doc["_id"] for doc in db[COLLECTION_NAME].aggregate(pipeline)]
-        weeks.sort(key=parse_week_display)  # Sort by parsed week_display
+        weeks.sort(key=parse_week_display, reverse=True)  # Sort by parsed week_display in descending order
         logger.info(f"Loaded {len(weeks)} weeks for district {district}")
         return jsonify({"weeks": [{"date": week, "display": week} for week in weeks]})
     except Exception as e:
