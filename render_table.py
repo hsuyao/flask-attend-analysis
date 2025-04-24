@@ -14,9 +14,13 @@ def render_stats_table(main_district, district_counts, main_district_counts, eve
     if not sub_districts and main_district not in main_district_counts:
         return '<div class="table-wrapper stats-wrapper flex-item"><p>無統計資料</p></div>'
 
-    html = '<div class="table-wrapper stats-wrapper flex-item">\n<table class="excel-table">\n'
-    html += f'<tr class="header"><th>{event_name}</th>'
+    # Calculate number of districts for dynamic width
     districts = [main_district] + sub_districts
+    num_districts = len(districts)
+
+    # Set CSS custom property for dynamic width
+    html = f'<div class="table-wrapper stats-wrapper flex-item" style="--num-districts: {num_districts};">\n<table class="excel-table">\n'
+    html += f'<tr class="header"><th>{event_name}</th>'
     for district in districts:
         html += f'<th>{district}</th>'
     html += '</tr>\n'
@@ -39,7 +43,7 @@ def render_stats_table(main_district, district_counts, main_district_counts, eve
     if is_history_page and event_totals is not None:
         logger.debug(f"Rendering event totals for main_district: {main_district}, event_totals: {event_totals}")
         # Add spacer row for 0.25 line spacing
-        html += '<tr class="spacer"><td colspan="{}"></td></tr>\n'.format(len(districts) + 1)
+        html += f'<tr class="spacer"><td colspan="{num_districts + 1}"></td></tr>\n'
         
         # Add rows for 禱告, 晨興, 小排 if they have data
         for event in ["禱告", "晨興", "小排"]:
@@ -91,6 +95,14 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         max_len = max(max(len(latest_attendance_data['attended'].get(d, [])), len(latest_attendance_data['not_attended'].get(d, []))) for d in sub_districts)
         sorted_attended = {}
         sorted_not_attended = {}
+        num_sub_districts = len(sub_districts)  # Number of sub-districts
+        total_cols = num_sub_districts * 2  # Each sub-district has 2 columns
+        # Calculate number of districts for stats table
+        stats_districts = sorted(
+            [d for d in district_counts.keys() if d != '總計' and d.startswith(main_district)],
+            key=parse_district
+        )
+        num_districts = len([main_district] + stats_districts)
 
         for district in sub_districts:
             attended_list = latest_attendance_data['attended'].get(district, [])
@@ -135,9 +147,8 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
             sorted_attended[district] = attended_with_highlights
             sorted_not_attended[district] = not_attended_with_highlights
 
-        html += f'<div class="district-section">\n<h2>{main_district} - {week_display}</h2>\n<div class="district-container flex-container">\n'
-        html += '<div class="table-wrapper attendance-wrapper flex-item">\n<table class="excel-table">\n'
-        total_cols = len(sub_districts) * 2
+        html += f'<div class="district-section">\n<h2>{main_district} - {week_display}</h2>\n<div class="district-container flex-container" style="--num-sub-districts: {num_sub_districts}; --num-districts: {num_districts};">\n'
+        html += f'<div class="table-wrapper attendance-wrapper flex-item" style="--num-sub-districts: {num_sub_districts};">\n<table class="excel-table">\n'
         html += f'<tr class="header"><th colspan="{total_cols}">{main_district}</th></tr>\n<tr class="district-row">\n'
         for district in sub_districts:
             html += f'<th colspan="2">{district}</th>'

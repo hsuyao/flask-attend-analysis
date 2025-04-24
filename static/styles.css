@@ -8,52 +8,52 @@ body {
 }
 
 .container {
-    max-width: 618px; /* Match fixed container width from uploaded CSS */
     margin: 0 auto;
     padding: 20px;
     background: #fff;
     border-radius: 8px;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    width: 100%; /* Allow full width */
 }
 
 h2 {
     text-align: center !important;
     color: #333;
-    font-size: 20px; /* Match uploaded CSS */
+    font-size: 20px;
 }
 
 .table-container {
-    width: 100%;
-    max-width: 618px; /* Match fixed container width */
+    width: 100%; /* Allow full width */
     margin: 0 auto;
     margin-top: 20px;
+    overflow-x: auto; /* Enable horizontal scrollbar */
 }
 
 .excel-table {
     border-collapse: collapse;
     margin-bottom: 20px;
     font-family: Arial, sans-serif;
-    font-size: 14px; /* Match uploaded CSS */
+    font-size: 14px;
 }
 
 .excel-table th,
 .excel-table td {
-    border: 1px solid #000; /* Match uploaded CSS */
-    padding: 2px; /* Match uploaded CSS */
-    text-align: left; /* Match uploaded CSS */
-    vertical-align: top; /* Match uploaded CSS */
-    line-height: 1.2; /* Match uploaded CSS */
-    font-size: 14px; /* Match uploaded CSS */
+    border: 1px solid #000;
+    padding: 2px;
+    text-align: left;
+    vertical-align: top;
+    line-height: 1.2;
+    font-size: 14px;
 }
 
 .excel-table th {
-    background-color: #2F4F4F; /* Header color from uploaded CSS */
+    background-color: #2F4F4F;
     color: white;
     font-weight: bold;
 }
 
 .excel-table .header th {
-    background-color: #2F4F4F; /* Match uploaded CSS */
+    background-color: #2F4F4F;
     color: white;
     font-weight: bold;
     padding: 2px;
@@ -61,131 +61,142 @@ h2 {
 }
 
 .excel-table .district-row th {
-    background-color: #4682B4; /* Match uploaded CSS */
+    background-color: #4682B4;
     color: white;
-    text-align: center; /* Match uploaded CSS */
+    text-align: center;
     padding: 2px;
     line-height: 1.2;
 }
 
 .excel-table .subheader th {
-    background-color: #5F9EA0; /* Match uploaded CSS */
+    background-color: #5F9EA0;
     color: white;
     padding: 2px;
     line-height: 1.2;
 }
 
 .excel-table .even {
-    background-color: #F3F2F1; /* Match uploaded CSS */
+    background-color: #F3F2F1;
     color: black;
 }
 
 .excel-table .odd {
-    background-color: #FFFFFF; /* Match uploaded CSS */
+    background-color: #FFFFFF;
     color: black;
 }
 
 .excel-table .total-row {
-    background-color: #B0E0E6; /* Match uploaded CSS */
+    background-color: #B0E0E6;
     color: black;
     font-weight: bold;
 }
 
 .excel-table .highlight-green {
-    background-color: #90EE90 !important; /* Match uploaded CSS */
+    background-color: #90EE90 !important;
 }
 
 .excel-table .highlight-red {
-    background-color: #FFB6C1 !important; /* Match uploaded CSS */
+    background-color: #FFB6C1 !important;
 }
 
 .district-section {
-    margin-bottom: 40px; /* Match uploaded CSS */
+    margin-bottom: 40px;
 }
 
 .district-container {
     display: flex;
-    flex-wrap: nowrap; /* Prevent wrapping, match uploaded CSS */
-    width: 618px; /* Match uploaded CSS: 468px attendance + 130px stats + 20px gap */
+    flex-wrap: nowrap;
+    width: calc((var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem) + 20px + 1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Attendance + gap + stats */
     margin: 0 auto;
-    gap: 20px; /* Match uploaded CSS */
-    justify-content: center; /* Match uploaded CSS */
+    gap: 20px;
+    justify-content: center;
 }
 
 .flex-container {
     display: flex;
-    flex-wrap: nowrap; /* Match uploaded CSS */
-    width: 618px; /* Match uploaded CSS */
+    flex-wrap: nowrap;
+    width: calc((var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem) + 20px + 1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Attendance + gap + stats */
     margin: 0 auto;
-    gap: 20px; /* Match uploaded CSS */
-    justify-content: center; /* Match uploaded CSS */
+    gap: 20px;
+    justify-content: center;
 }
 
 .flex-item {
-    flex: none; /* Match uploaded CSS: no flex scaling */
+    flex: none; /* Prevent flex scaling */
 }
 
 .table-wrapper {
-    text-align: left; /* Match uploaded CSS */
-    overflow-x: auto; /* Match uploaded CSS */
+    text-align: left;
+    overflow-x: auto; /* Ensure scrollbar */
 }
 
 .attendance-wrapper {
-    width: 468px; /* Match uploaded CSS: 6 columns × 78px */
-    max-height: 70vh; /* Match uploaded CSS */
-    flex: none; /* Match uploaded CSS */
-    overflow-x: auto; /* Match uploaded CSS */
-    overflow-y: auto; /* Match uploaded CSS */
+    width: calc(var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem); /* Dynamic width: 7 chars per sub-district + buffer */
+    max-height: 70vh;
+    flex: none;
+    overflow-x: auto; /* Enable horizontal scrollbar */
+    overflow-y: auto;
 }
 
 .attendance-wrapper .excel-table {
-    width: 468px; /* Ensure fixed table width, match uploaded CSS */
+    width: calc(var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem); /* Match wrapper */
+    min-width: calc(var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem); /* Prevent shrinkage */
 }
 
-.attendance-wrapper .excel-table th,
-.attendance-wrapper .excel-table td {
-    width: 78px; /* Match uploaded CSS: 468px / 6 columns */
+.attendance-wrapper .excel-table th:nth-child(odd),
+.attendance-wrapper .excel-table td:nth-child(odd) {
+    width: 3.5rem; /* 4 characters for 本週到會 */
+    min-width: 3.5rem;
+}
+
+.attendance-wrapper .excel-table th:nth-child(even),
+.attendance-wrapper .excel-table td:nth-child(even) {
+    width: 2.625rem; /* 3 characters for 未到會 */
+    min-width: 2.625rem;
 }
 
 .stats-wrapper {
-    width: 160px; /* Match uploaded CSS: 100px + 50px */
-    flex: none; /* Match uploaded CSS */
+    width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Dynamic width: 1.5 * (2 + num_districts) */
+    flex: none;
 }
 
 .stats-wrapper .excel-table {
-    width: 160px; /* Ensure fixed table width, match uploaded CSS */
+    width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Match wrapper */
+    min-width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Prevent shrinkage */
 }
 
 .stats-wrapper .excel-table th:first-child,
 .stats-wrapper .excel-table td:first-child {
-    width: 120px; /* Match uploaded CSS: first column (age/event) */
+    width: 2.625rem; /* 3 characters (1.5 * 2) for age categories */
+    min-width: 2.625rem;
 }
 
 .stats-wrapper .excel-table th:nth-child(n+2),
 .stats-wrapper .excel-table td:nth-child(n+2) {
-    width: 40px; /* Match uploaded CSS: subsequent columns (counts) */
+    width: 1.3125rem; /* 1.5 characters (1.5 * 1) for counts */
+    min-width: 1.3125rem;
 }
 
 .button-container {
     text-align: center;
-    margin: 10px 0; /* Match uploaded CSS */
+    margin: 10px 0;
 }
 
 .button {
     display: inline-block;
-    padding: 8px 16px; /* Match uploaded CSS */
-    margin: 10px 5px; /* Match uploaded CSS */
-    background-color: #1C2526; /* Match uploaded CSS */
+    padding: 8px 16px;
+    margin: 10px 5px;
+    background-color: #1C2526;
     color: white;
     text-decoration: none;
-    border: none; /* Match uploaded CSS */
-    border-radius: 4px; /* Match uploaded CSS */
-    cursor: pointer; /* Match uploaded CSS */
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
     transition: background-color 0.3s;
 }
 
 .button:hover {
-    background-color: #0F1414; /* Match uploaded CSS */
+    background-color: #0F1414;
 }
 
 .week-selector-container {
@@ -193,15 +204,15 @@ h2 {
     display: flex;
     align-items: center;
     gap: 10px;
-    text-align: center; /* Match uploaded CSS */
+    text-align: center;
 }
 
 .week-selector {
-    padding: 5px; /* Match uploaded CSS */
-    font-size: 16px; /* Match uploaded CSS */
-    background-color: #f0f0f0; /* Match uploaded CSS */
-    border: 1px solid #ccc; /* Match uploaded CSS */
-    border-radius: 4px; /* Match uploaded CSS */
+    padding: 5px;
+    font-size: 16px;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
 }
 
 /* Progress Bar */
@@ -222,7 +233,7 @@ h2 {
 
 .progress-fill {
     height: 20px;
-    background-color: #1C2526; /* Match uploaded CSS for button color */
+    background-color: #1C2526;
     width: 0%;
     transition: width 0.3s;
 }
@@ -241,7 +252,7 @@ h2 {
 
 /* Event rows for 禱告, 晨興, 小排 */
 .excel-table .event-row {
-    background-color: #f0f8ff; /* Keep original light blue for event rows */
+    background-color: #f0f8ff;
     font-weight: normal;
 }
 
@@ -249,34 +260,69 @@ h2 {
 @media (max-width: 768px) {
     .container {
         padding: 10px;
-        max-width: 100%; /* Adjust for smaller screens */
+        width: 100%;
+    }
+
+    .table-container {
+        width: 100%;
+        overflow-x: auto; /* Ensure scrollbar on mobile */
     }
 
     .flex-container,
     .district-container {
-        width: 100%;
-        flex-direction: column; /* Stack tables on small screens */
+        width: 100%; /* Stack tables on small screens */
+        flex-direction: column; /* Stack vertically */
     }
 
     .attendance-wrapper,
     .stats-wrapper {
-        width: 100%; /* Full width on small screens */
+        width: 100%; /* Allow full width */
+        overflow-x: auto; /* Ensure scrollbar */
     }
 
-    .attendance-wrapper .excel-table,
+    .attendance-wrapper .excel-table {
+        width: calc(var(--num-sub-districts, 3) * 7 * 0.75rem + 0.75rem); /* Dynamic width at 12px font */
+        min-width: calc(var(--num-sub-districts, 3) * 7 * 0.75rem + 0.75rem);
+    }
+
     .stats-wrapper .excel-table {
-        width: 100%; /* Full width tables */
+        width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.75rem);
+        min-width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.75rem);
     }
 
     .excel-table th,
     .excel-table td {
         padding: 2px;
-        font-size: 12px; /* Slightly smaller font for mobile */
+        font-size: 12px; /* Smaller font for mobile */
+    }
+
+    .attendance-wrapper .excel-table th:nth-child(odd),
+    .attendance-wrapper .excel-table td:nth-child(odd) {
+        width: 3rem; /* 4 characters at 12px */
+        min-width: 3rem;
+    }
+
+    .attendance-wrapper .excel-table th:nth-child(even),
+    .attendance-wrapper .excel-table td:nth-child(even) {
+        width: 2.25rem; /* 3 characters at 12px */
+        min-width: 2.25rem;
+    }
+
+    .stats-wrapper .excel-table th:first-child,
+    .stats-wrapper .excel-table td:first-child {
+        width: 2.25rem; /* 3 characters (1.5 * 2) at 12px */
+        min-width: 2.25rem;
+    }
+
+    .stats-wrapper .excel-table th:nth-child(n+2),
+    .stats-wrapper .excel-table td:nth-child(n+2) {
+        width: 1.125rem; /* 1.5 characters (1.5 * 1) at 12px */
+        min-width: 1.125rem;
     }
 
     .week-selector-container {
         flex-direction: column;
-        align-items: center; /* Center align on mobile */
+        align-items: center;
     }
 
     .week-selector {
