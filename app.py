@@ -77,15 +77,14 @@ def process_excel_task(file_contents, file_extensions, task_id):
         
         combined_result['all_attendance_data'].extend(result['all_attendance_data'])
     
-    # Remove duplicates and sort in descending order
+    # Remove duplicates and sort
     seen_weeks = set()
     unique_attendance_data = []
-    for item in sorted(combined_result['all_attendance_data'], key=lambda x: parse_week_display(x[2]), reverse=True):
+    for item in sorted(combined_result['all_attendance_data'], key=lambda x: parse_week_display(x[2])):
         if item[2] not in seen_weeks:
             seen_weeks.add(item[2])
             unique_attendance_data.append(item)
     combined_result['all_attendance_data'] = unique_attendance_data
-    logger.info(f"Sorted all_attendance_data in descending order: {[item[2] for item in unique_attendance_data]}")
 
     tasks[task_id] = {
         'state': 'SUCCESS', 
@@ -127,7 +126,7 @@ def upload_file():
         return jsonify({"task_id": task_id}), 202
     except Exception as e:
         logger.error(f"Failed to start task: {str(e)}")
-        return jsonify({"error": f"Task initiation failed: {str(e)}")}, 500
+        return jsonify({"error": f"Task initiation failed: {str(e)}"}), 500
 
 @app.route('/task_status/<task_id>')
 def task_status(task_id):
@@ -176,17 +175,8 @@ def result():
         logger.error("No valid attendance data found in session")
         return render_template('index.html', error="No valid attendance data", version=get_version_info())
 
-    # Log raw session data
-    logger.info(f"Raw all_attendance_data from session: {[item[2] for item in all_attendance_data]}")
-
-    # Sort all_attendance_data in descending order to match history.html
+    # Sort all_attendance_data in descending order and keep it consistent
     sorted_attendance_data = sorted(all_attendance_data, key=lambda x: parse_week_display(x[2]), reverse=True)
-    logger.info(f"Sorted week_options order: {[item[2] for item in sorted_attendance_data]}")
-
-    # Log parsed week_display values for debugging
-    parsed_values = [(item[2], parse_week_display(item[2])) for item in sorted_attendance_data]
-    logger.info(f"Parsed week_display values: {parsed_values}")
-
     placeholder_date = datetime.now()
 
     # Find 主日 data or fall back to the first file's data in sorted order
@@ -232,17 +222,14 @@ def result():
         event_totals=event_totals
     )
 
-    # Generate week options with reversed index mapping to fix mismatch
-    num_weeks = len(sorted_attendance_data)
-    week_options = [(week_name, num_weeks - 1 - idx) for idx, (_, _, week_name, _) in enumerate(sorted_attendance_data)]
-    logger.info(f"week_options for dropdown: {week_options}")
-
+    # Generate week options from sorted data
+    week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(sorted_attendance_data)]
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
         has_file_stream=True,
         week_options=week_options,
-        selected_week_idx=num_weeks - 1 - sunday_idx,
+        selected_week_idx=sunday_idx,
         version=get_version_info()
     )
 
@@ -257,12 +244,9 @@ def get_week_data(week_idx):
 
     # Sort in descending order to match week_options
     sorted_attendance_data = sorted(all_attendance_data, key=lambda x: parse_week_display(x[2]), reverse=True)
-    logger.info(f"get_week_data sorted order: {[item[2] for item in sorted_attendance_data]}, week_idx: {week_idx}")
-    # Invert week_idx to match reversed index mapping
-    data_idx = len(sorted_attendance_data) - 1 - week_idx
-    date, attendance_data, week_name, event_name = sorted_attendance_data[data_idx]
+    date, attendance_data, week_name, event_name = sorted_attendance_data[week_idx]
     latest_main_district = session.get('latest_main_district', '')
-    _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(sorted_attendance_data[data_idx])
+    _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(sorted_attendance_data[week_idx])
     if not main_district:
         main_district = latest_main_district
 
@@ -342,7 +326,7 @@ def download_file():
         )
     except Exception as e:
         logger.error(f"Failed to generate Excel: {str(e)}")
-        return jsonify({"error": f"Download failed: {str(e)}")}, 500
+        return jsonify({"error": f"Download failed: {str(e)}"}), 500
 
 @app.route('/history')
 def history():

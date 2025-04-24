@@ -40,7 +40,6 @@
     <script>
         function updateTable() {
             var weekIdx = document.getElementById('weekSelector').value;
-            console.log('Selected week index:', weekIdx);
             $.ajax({
                 url: '/get_week_data/' + weekIdx,
                 type: 'GET',
@@ -69,11 +68,6 @@
                 sessionStorage.removeItem('taskResult');
                 updateTable();
             }
-            // Log dropdown options and their values for debugging
-            const options = $('#weekSelector option').map(function() {
-                return { text: $(this).text(), value: $(this).val() };
-            }).get();
-            console.log('Dropdown options:', options);
         });
     </script>
 </body>
