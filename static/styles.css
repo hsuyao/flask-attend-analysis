@@ -34,6 +34,7 @@ h2 {
     margin-bottom: 20px;
     font-family: Arial, sans-serif;
     font-size: 14px;
+    box-sizing: border-box; /* Ensure borders are included in width */
 }
 
 .excel-table th,
@@ -44,6 +45,7 @@ h2 {
     vertical-align: top;
     line-height: 1.2;
     font-size: 14px;
+    box-sizing: border-box; /* Ensure borders are included in width */
 }
 
 .excel-table th {
@@ -106,7 +108,7 @@ h2 {
 .district-container {
     display: flex;
     flex-wrap: nowrap;
-    width: calc((var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem) + 20px + 1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Attendance + gap + stats */
+    width: calc((var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem) + 20px + 1.5 * (3 + var(--num-districts, 1)) * 0.875rem); /* Attendance + gap + stats */
     margin: 0 auto;
     gap: 20px;
     justify-content: center;
@@ -115,7 +117,7 @@ h2 {
 .flex-container {
     display: flex;
     flex-wrap: nowrap;
-    width: calc((var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem) + 20px + 1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Attendance + gap + stats */
+    width: calc((var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem) + 20px + 1.5 * (3 + var(--num-districts, 1)) * 0.875rem); /* Attendance + gap + stats */
     margin: 0 auto;
     gap: 20px;
     justify-content: center;
@@ -131,7 +133,7 @@ h2 {
 }
 
 .attendance-wrapper {
-    width: calc(var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem); /* Dynamic width: 7 chars per sub-district + buffer */
+    width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem); /* Dynamic width: 9 chars per sub-district + 6-char buffer */
     max-height: 70vh;
     flex: none;
     overflow-x: auto; /* Enable horizontal scrollbar */
@@ -139,41 +141,41 @@ h2 {
 }
 
 .attendance-wrapper .excel-table {
-    width: calc(var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem); /* Match wrapper */
-    min-width: calc(var(--num-sub-districts, 3) * 7 * 0.875rem + 0.875rem); /* Prevent shrinkage */
+    width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem); /* Match wrapper */
+    min-width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem); /* Prevent shrinkage */
 }
 
 .attendance-wrapper .excel-table th:nth-child(odd),
 .attendance-wrapper .excel-table td:nth-child(odd) {
-    width: 3.5rem; /* 4 characters for 本週到會 */
-    min-width: 3.5rem;
+    width: 4.375rem; /* 5 characters for 本週到會 */
+    min-width: 4.375rem;
 }
 
 .attendance-wrapper .excel-table th:nth-child(even),
 .attendance-wrapper .excel-table td:nth-child(even) {
-    width: 2.625rem; /* 3 characters for 未到會 */
-    min-width: 2.625rem;
+    width: 3.5rem; /* 4 characters for 未到會 */
+    min-width: 3.5rem;
 }
 
 .stats-wrapper {
-    width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Dynamic width: 1.5 * (2 + num_districts) */
+    width: calc(1.5 * (3 + var(--num-districts, 1)) * 0.875rem); /* Dynamic width: 1.5 * (3 + num_districts) */
     flex: none;
 }
 
 .stats-wrapper .excel-table {
-    width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Match wrapper */
-    min-width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.875rem); /* Prevent shrinkage */
+    width: calc(1.5 * (3 + var(--num-districts, 1)) * 0.875rem); /* Match wrapper */
+    min-width: calc(1.5 * (3 + var(--num-districts, 1)) * 0.875rem); /* Prevent shrinkage */
 }
 
 .stats-wrapper .excel-table th:first-child,
 .stats-wrapper .excel-table td:first-child {
-    width: 2.625rem; /* 3 characters (1.5 * 2) for age categories */
-    min-width: 2.625rem;
+    width: 3.5rem; /* 4 characters for age categories */
+    min-width: 3.5rem;
 }
 
 .stats-wrapper .excel-table th:nth-child(n+2),
 .stats-wrapper .excel-table td:nth-child(n+2) {
-    width: 1.3125rem; /* 1.5 characters (1.5 * 1) for counts */
+    width: 1.3125rem; /* 1.5 characters for counts */
     min-width: 1.3125rem;
 }
 
@@ -281,13 +283,13 @@ h2 {
     }
 
     .attendance-wrapper .excel-table {
-        width: calc(var(--num-sub-districts, 3) * 7 * 0.75rem + 0.75rem); /* Dynamic width at 12px font */
-        min-width: calc(var(--num-sub-districts, 3) * 7 * 0.75rem + 0.75rem);
+        width: calc(var(--num-sub-districts, 3) * 9 * 0.75rem + 4.5rem); /* Dynamic width at 12px font + 6-char buffer */
+        min-width: calc(var(--num-sub-districts, 3) * 9 * 0.75rem + 4.5rem);
     }
 
     .stats-wrapper .excel-table {
-        width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.75rem);
-        min-width: calc(1.5 * (2 + var(--num-districts, 1)) * 0.75rem);
+        width: calc(1.5 * (3 + var(--num-districts, 1)) * 0.75rem);
+        min-width: calc(1.5 * (3 + var(--num-districts, 1)) * 0.75rem);
     }
 
     .excel-table th,
@@ -298,25 +300,25 @@ h2 {
 
     .attendance-wrapper .excel-table th:nth-child(odd),
     .attendance-wrapper .excel-table td:nth-child(odd) {
-        width: 3rem; /* 4 characters at 12px */
-        min-width: 3rem;
+        width: 3.75rem; /* 5 characters at 12px */
+        min-width: 3.75rem;
     }
 
     .attendance-wrapper .excel-table th:nth-child(even),
     .attendance-wrapper .excel-table td:nth-child(even) {
-        width: 2.25rem; /* 3 characters at 12px */
-        min-width: 2.25rem;
+        width: 3rem; /* 4 characters at 12px */
+        min-width: 3rem;
     }
 
     .stats-wrapper .excel-table th:first-child,
     .stats-wrapper .excel-table td:first-child {
-        width: 2.25rem; /* 3 characters (1.5 * 2) at 12px */
-        min-width: 2.25rem;
+        width: 3rem; /* 4 characters at 12px */
+        min-width: 3rem;
     }
 
     .stats-wrapper .excel-table th:nth-child(n+2),
     .stats-wrapper .excel-table td:nth-child(n+2) {
-        width: 1.125rem; /* 1.5 characters (1.5 * 1) at 12px */
+        width: 1.125rem; /* 1.5 characters at 12px */
         min-width: 1.125rem;
     }
 
