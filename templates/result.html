@@ -13,13 +13,13 @@
         <h2>統計結果</h2>
         <div class="table-container">
             <div class="week-selector-container">
-                <select id="weekSelector" class="week-selector">
-                    {% for week_name, idx in week_options %}
-                        <option value="{{ idx }}" {% if idx == selected_week_idx %}selected{% endif %}>
-                            {{ week_name }}
-                        </option>
-                    {% endfor %}
-                </select>
+              <select id="weekSelector" class="week-selector">
+                  {% for week_name, idx in week_options|reverse %}
+                      <option value="{{ idx }}" {% if loop.first %}selected{% endif %}>
+                          {{ week_name }}
+                      </option>
+                  {% endfor %}
+              </select>
             </div>
             <div id="attendanceTable">
                 {{ attendance_table_html | safe }}

@@ -282,6 +282,7 @@ def result():
     )
 
     week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(sorted_attendance_data)]
+    logger.info(f"Generated week_options: {week_options}")
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
@@ -306,6 +307,7 @@ def get_week_data(week_idx):
 
     sorted_attendance_data = sorted(all_attendance_data, key=lambda x: parse_week_display(x[2]), reverse=True)
     date, attendance_data, week_name, event_name = sorted_attendance_data[week_idx]
+    logger.info(f"Fetching data for week_idx={week_idx}, week_name={week_name}")
     latest_main_district = session.get('latest_main_district', '')
     _, district_counts, _, main_district, main_district_counts = classify_attendance_for_week(sorted_attendance_data[week_idx])
     if not main_district:
