@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table, render_stats_table
 from database import init_database, get_six_month_averages, get_event_name, get_event_totals
+from user import init_users_collection, create_user, verify_user, create_admin_if_not_exists
 from config import db, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
@@ -24,13 +25,22 @@ logger = logging.getLogger(__name__)
 # Log application startup
 logger.info("Starting Flask application")
 
-# Initialize database
+# Initialize database and users collection
 try:
     init_database()
+    init_users_collection()
     db.command("ping")  # Test MongoDB connection
     logger.info("Successfully connected to MongoDB")
+    
+    # Create admin user from environment variables
+    admin_username = os.getenv('ADMIN_ACCOUNT')
+    admin_password = os.getenv('ADMIN_PASSWORD')
+    if not admin_username or not admin_password:
+        logger.error("ADMIN_ACCOUNT and ADMIN_PASSWORD environment variables are required")
+        raise ValueError("Admin credentials not set")
+    create_admin_if_not_exists(admin_username, admin_password)
 except Exception as e:
-    logger.error(f"Failed to initialize database: {str(e)}")
+    logger.error(f"Failed to initialize database or admin user: {str(e)}")
     raise
 
 # Thread pool for background tasks
@@ -38,16 +48,20 @@ executor = ThreadPoolExecutor(max_workers=2)
 tasks = {}  # Store task status and results
 
 def get_version_info():
-    # Read version info from file
     try:
         with open('/app/version_info.txt', 'r') as f:
             return f.read().strip()
     except Exception:
         return "Unknown-Unknown"
 
-def process_excel_task(file_contents, file_extensions, task_id):
-    # Process multiple Excel files in background thread
-    logger.info(f"Starting Excel processing task {task_id}")
+def is_authenticated():
+    return 'user' in session and session['user'].get('username')
+
+def is_admin():
+    return is_authenticated() and session['user'].get('role') == 'admin'
+
+def process_excel_task(file_contents, file_extensions, task_id, save_to_db=True):
+    logger.info(f"Starting Excel processing task {task_id}, save_to_db={save_to_db}")
     combined_result = {
         'latest_analytic_date': None,
         'latest_attendance_data': None,
@@ -62,9 +76,8 @@ def process_excel_task(file_contents, file_extensions, task_id):
     for idx, (file_content, file_extension) in enumerate(zip(file_contents, file_extensions)):
         buffered_stream = BytesIO(file_content)
         tasks[task_id] = {'state': 'PROGRESS', 'stage': f'Parsing Excel File {idx + 1}', 'progress': 20 + (idx * 20)}
-        result = process_excel(buffered_stream, file_extension)
+        result = process_excel(buffered_stream, file_extension, save_to_db=save_to_db)
         
-        # Merge results
         if result['latest_attendance_data']:
             if not combined_result['latest_attendance_data'] or parse_week_display(result['latest_week_display']) > parse_week_display(combined_result['latest_week_display'] or ''):
                 combined_result['latest_analytic_date'] = result['latest_analytic_date']
@@ -77,7 +90,6 @@ def process_excel_task(file_contents, file_extensions, task_id):
         
         combined_result['all_attendance_data'].extend(result['all_attendance_data'])
     
-    # Remove duplicates and sort
     seen_weeks = set()
     unique_attendance_data = []
     for item in sorted(combined_result['all_attendance_data'], key=lambda x: parse_week_display(x[2])):
@@ -96,12 +108,60 @@ def process_excel_task(file_contents, file_extensions, task_id):
 
 @app.route('/')
 def index():
-    return render_template('index.html', version=get_version_info())
+    if not is_authenticated():
+        return redirect(url_for('login'))
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    return render_template('index.html', version=get_version_info(), is_anonymous=is_anonymous)
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = verify_user(username, password)
+        if user:
+            session['user'] = {
+                'username': user['username'],
+                'role': user['role']
+            }
+            logger.info(f"User {username} logged in successfully")
+            return redirect(url_for('index'))
+        return render_template('login.html', error="無效的使用者名稱或密碼", version=get_version_info())
+    return render_template('login.html', version=get_version_info())
+
+@app.route('/anonymous_login')
+def anonymous_login():
+    session['user'] = {
+        'username': 'anonymous',
+        'role': 'anonymous'
+    }
+    logger.info("Anonymous user logged in")
+    return redirect(url_for('index'))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        if create_user(username, email, password):
+            logger.info(f"User {username} registered successfully")
+            return redirect(url_for('login'))
+        return render_template('register.html', error="使用者名稱已存在", version=get_version_info())
+    return render_template('register.html', version=get_version_info())
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    logger.info("User logged out")
+    return redirect(url_for('login'))
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    # Handle multiple file uploads and start background task
-    logger.info("Received upload request")
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
     file_keys = ['file1', 'file2', 'file3', 'file4']
     files = []
     file_extensions = []
@@ -121,7 +181,7 @@ def upload_file():
     task_id = str(uuid.uuid4())
     try:
         tasks[task_id] = {'state': 'PENDING', 'stage': 'Waiting', 'progress': 0}
-        executor.submit(process_excel_task, files, file_extensions, task_id)
+        executor.submit(process_excel_task, files, file_extensions, task_id, save_to_db=not is_anonymous)
         logger.info(f"Started background task: {task_id}")
         return jsonify({"task_id": task_id}), 202
     except Exception as e:
@@ -130,14 +190,16 @@ def upload_file():
 
 @app.route('/task_status/<task_id>')
 def task_status(task_id):
-    # Check status of background task
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
     task = tasks.get(task_id, {'state': 'PENDING', 'stage': 'Not Found', 'progress': 0})
     logger.debug(f"Task status: {task_id} - {task}")
     return jsonify(task)
 
 @app.route('/task_result/<task_id>')
 def task_result(task_id):
-    # Retrieve task result and store in session
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
     task = tasks.get(task_id)
     if not task:
         return jsonify({"status": "error", "error": "Task not found"}), 404
@@ -161,8 +223,10 @@ def task_result(task_id):
 
 @app.route('/result')
 def result():
-    # Render result page with attendance and stats data, prioritizing 主日
-    logger.info(f"Session contents: {session}")
+    if not is_authenticated():
+        return redirect(url_for('login'))
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
     latest_attendance_data = session.get('latest_attendance_data')
     latest_week_display = session.get('latest_week_display', "No week data")
     latest_district_counts = session.get('latest_district_counts')
@@ -173,32 +237,28 @@ def result():
 
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
         logger.error("No valid attendance data found in session")
-        return render_template('index.html', error="No valid attendance data", version=get_version_info())
+        return render_template('index.html', error="No valid attendance data", version=get_version_info(), is_anonymous=is_anonymous)
 
-    # Sort all_attendance_data in descending order and keep it consistent
     sorted_attendance_data = sorted(all_attendance_data, key=lambda x: parse_week_display(x[2]), reverse=True)
     placeholder_date = datetime.now()
 
-    # Find 主日 data or fall back to the first file's data in sorted order
     sunday_data = None
     for idx, (date, data, week_name, evt_name) in enumerate(sorted_attendance_data):
         if evt_name == "主日":
             sunday_data = (idx, date, data, week_name, evt_name)
             break
     if not sunday_data and sorted_attendance_data:
-        # Fallback to the first file's data
         sunday_data = (0, sorted_attendance_data[0][0], sorted_attendance_data[0][1], sorted_attendance_data[0][2], sorted_attendance_data[0][3])
 
     if not sunday_data:
         logger.error("No 主日 or fallback data found")
-        return render_template('index.html', error="No 主日 or fallback data available", version=get_version_info())
+        return render_template('index.html', error="No 主日 or fallback data available", version=get_version_info(), is_anonymous=is_anonymous)
 
     sunday_idx, sunday_date, sunday_attendance_data, sunday_week_display, sunday_event_name = sunday_data
     sunday_district_counts = latest_district_counts
     sunday_main_district_counts = latest_main_district_counts
     sunday_main_district = latest_main_district
 
-    # Recalculate counts for the selected week
     _, sunday_district_counts, _, sunday_main_district, sunday_main_district_counts = classify_attendance_for_week(sorted_attendance_data[sunday_idx])
 
     all_names = set()
@@ -207,22 +267,20 @@ def result():
     for district in sunday_attendance_data['not_attended']:
         all_names.update(sunday_attendance_data['not_attended'][district])
     avg_attendance_rates = session.get('avg_attendance_rates')
-    if not avg_attendance_rates:
+    if not avg_attendance_rates and not is_anonymous:
         avg_attendance_rates = get_six_month_averages(list(all_names), placeholder_date)
         session['avg_attendance_rates'] = avg_attendance_rates
 
-    # Get event totals for the selected week
-    event_totals = get_event_totals(sunday_week_display, sunday_main_district)
+    event_totals = get_event_totals(sunday_week_display, sunday_main_district) if not is_anonymous else {}
 
     attendance_table_html = render_attendance_table(
         sunday_week_display, sunday_attendance_data, sorted_attendance_data,
         sunday_district_counts, sunday_main_district_counts, avg_attendance_rates,
         event_name=sunday_event_name,
-        is_history_page=True,  # Use history page layout
+        is_history_page=True,
         event_totals=event_totals
     )
 
-    # Generate week options from sorted data
     week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(sorted_attendance_data)]
     return render_template(
         'result.html',
@@ -230,19 +288,22 @@ def result():
         has_file_stream=True,
         week_options=week_options,
         selected_week_idx=sunday_idx,
-        version=get_version_info()
+        version=get_version_info(),
+        is_anonymous=is_anonymous
     )
 
 @app.route('/get_week_data/<int:week_idx>')
 def get_week_data(week_idx):
-    # Fetch attendance data for a specific week, prioritizing 主日 for stats
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
     all_attendance_data = session.get('all_attendance_data', [])
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
             'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>No data</th></tr></table></div>'
         }), 400
 
-    # Sort in descending order to match week_options
     sorted_attendance_data = sorted(all_attendance_data, key=lambda x: parse_week_display(x[2]), reverse=True)
     date, attendance_data, week_name, event_name = sorted_attendance_data[week_idx]
     latest_main_district = session.get('latest_main_district', '')
@@ -256,25 +317,23 @@ def get_week_data(week_idx):
     for district in attendance_data['not_attended']:
         all_names.update(attendance_data['not_attended'][district])
     avg_attendance_rates = session.get('avg_attendance_rates')
-    if not avg_attendance_rates:
+    if not avg_attendance_rates and not is_anonymous:
         avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
         session['avg_attendance_rates'] = avg_attendance_rates
 
-    # Get event totals for the selected week
-    event_totals = get_event_totals(week_name, main_district)
+    event_totals = get_event_totals(week_name, main_district) if not is_anonymous else {}
 
     attendance_table_html = render_attendance_table(
         week_name, attendance_data, sorted_attendance_data,
         district_counts, main_district_counts, avg_attendance_rates,
         event_name=event_name,
-        is_history_page=True,  # Use history page layout
+        is_history_page=True,
         event_totals=event_totals
     )
 
     return jsonify({'attendance_table': attendance_table_html})
 
 def classify_attendance_for_week(week_data):
-    # Classify attendance data for a specific week
     date, data, week_display, event_name = week_data
     attended = data['attended']
     not_attended = data['not_attended']
@@ -283,8 +342,12 @@ def classify_attendance_for_week(week_data):
     main_district_counts = {}
     age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
 
-    records = db[COLLECTION_NAME].find({"week_display": week_display, "event_name": event_name})
-    age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if not is_anonymous:
+        records = db[COLLECTION_NAME].find({"week_display": week_display, "event_name": event_name})
+        age_mapping = {(record["district"], record["name"]): record["age_group"] for record in records}
+    else:
+        age_mapping = {}
 
     for district in set(attended.keys()).union(not_attended.keys()):
         main_district_value = parse_district(district)[0]
@@ -308,8 +371,9 @@ def classify_attendance_for_week(week_data):
 
 @app.route('/download', methods=['GET'])
 def download_file():
-    # Download processed Excel file
-    logger.info("Received download request")
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
+    
     all_attendance_data = session.get('all_attendance_data', [])
     if not all_attendance_data:
         return jsonify({"error": "No data available"}), 404
@@ -330,7 +394,13 @@ def download_file():
 
 @app.route('/history')
 def history():
-    # Render history page with available main districts
+    if not is_authenticated():
+        return redirect(url_for('login'))
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if is_anonymous:
+        return render_template('index.html', error="匿名使用者無法查看歷史紀錄", version=get_version_info(), is_anonymous=True)
+    
     try:
         districts = db[COLLECTION_NAME].distinct("district")
         main_districts = sorted(
@@ -348,12 +418,19 @@ def history():
         return render_template(
             'index.html',
             error="無法載入歷史紀錄頁面",
-            version=get_version_info()
+            version=get_version_info(),
+            is_anonymous=is_anonymous
         )
 
 @app.route('/get_weeks_for_district/<district>')
 def get_weeks_for_district(district):
-    # Get available weeks for a given main district
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if is_anonymous:
+        return jsonify({"error": "匿名使用者無法訪問此資源"}), 403
+    
     try:
         pipeline = [
             {"$match": {
@@ -365,7 +442,7 @@ def get_weeks_for_district(district):
             }}
         ]
         weeks = [doc["_id"] for doc in db[COLLECTION_NAME].aggregate(pipeline)]
-        weeks.sort(key=parse_week_display, reverse=True)  # Sort by parsed week_display in descending order
+        weeks.sort(key=parse_week_display, reverse=True)
         logger.info(f"Loaded {len(weeks)} weeks for district {district}")
         return jsonify({"weeks": [{"date": week, "display": week} for week in weeks]})
     except Exception as e:
@@ -374,12 +451,18 @@ def get_weeks_for_district(district):
 
 @app.route('/get_history_data/<district>/<path:week_display>')
 def get_history_data(district, week_display):
-    # Get attendance data for a specific district and week
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if is_anonymous:
+        return jsonify({"error": "匿名使用者無法訪問此資源"}), 403
+    
     try:
         records = db[COLLECTION_NAME].find({
             "district": {"$regex": f"^{district}"},
             "week_display": week_display,
-            "event_name": "主日"  # Ensure only 主日 records for main table
+            "event_name": "主日"
         })
         records_list = list(records)
         logger.debug(f"Fetched {len(records_list)} records for {district} on {week_display} with event_name: 主日")
@@ -425,7 +508,6 @@ def get_history_data(district, week_display):
         total_attendance = sum(d['total'] for d in district_counts.values())
         district_counts['總計'] = total_attendance
 
-        # Get all week_displays before the current one, sorted by parsed week_display
         all_weeks = db[COLLECTION_NAME].distinct("week_display", {
             "district": {"$regex": f"^{district}"},
             "event_name": "主日"
@@ -471,7 +553,6 @@ def get_history_data(district, week_display):
             all_names.update(not_attended[sub_district])
         avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
 
-        # Get event name and event totals from database
         event_name = get_event_name(week_display)
         event_totals = get_event_totals(week_display, district)
         logger.debug(f"Event name for {week_display} in district {district}: {event_name}")

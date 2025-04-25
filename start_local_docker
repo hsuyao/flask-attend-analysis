@@ -1,4 +1,6 @@
 docker run -p 5000:5000 \
   -e SECRET_KEY=iamerictsai \
   -e MONGO_URI=$MONGO_URI \
+  -e ADMIN_PASSWORD=$ADMIN_PASSWORD \
+  -e ADMIN_ACCOUNT=$ADMIN_ACCOUNT \
   attendance-app
