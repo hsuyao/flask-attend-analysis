@@ -28,4 +28,4 @@ RUN if [ -d .git ]; then \
 EXPOSE 5000
 
 # Start Gunicorn and Redis
-CMD redis-server --port 6379 & gunicorn --bind 0.0.0.0:5000 --workers=1 --threads=4 app:app
+CMD gunicorn --bind 0.0.0.0:5000 --workers=1 --threads=4 app:app
