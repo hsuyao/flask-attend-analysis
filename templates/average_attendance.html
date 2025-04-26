@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>半年平均出席統計</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h2>半年平均出席統計</h2>
+        <div class="table-container">
+            <div class="week-selector-container">
+                <label for="dateSelector">選擇結束日期：</label>
+                <input type="date" id="dateSelector" class="week-selector">
+                <label for="districtSelector" style="margin-left: 20px;">選擇大區：</label>
+                <select id="districtSelector" class="week-selector">
+                    <option value="">請選擇大區</option>
+                    {% for district in main_districts %}
+                        <option value="{{ district }}">{{ district }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="attendanceTable">
+                <p>請選擇日期和大區以顯示數據</p>
+            </div>
+        </div>
+        <div class="button-container">
+            <a href="{{ url_for('index') }}" class="button">返回上傳頁面</a>
+            <a href="{{ url_for('logout') }}" class="button">登出</a>
+        </div>
+    </div>
+    <footer style="text-align: center; margin-top: 20px;">
+        <p>版本: {{ version }}</p>
+    </footer>
+
+    <script>
+        $(document).ready(function() {
+            $('#dateSelector, #districtSelector').on('change', function() {
+                var date = $('#dateSelector').val();
+                var district = $('#districtSelector').val();
+                $('#attendanceTable').html('<p>正在載入數據...</p>');
+
+                if (date && district) {
+                    $.ajax({
+                        url: '/get_average_attendance_data/' + encodeURIComponent(district) + '/' + date,
+                        type: 'GET',
+                        success: function(response) {
+                            if (response.attendance_table) {
+                                $('#attendanceTable').html(response.attendance_table);
+                                console.log('平均出席表格更新成功');
+                            } else {
+                                $('#attendanceTable').html('<p>無可用數據</p>');
+                            }
+                        },
+                        error: function(xhr) {
+                            $('#attendanceTable').html('<p>無法載入數據：' + (xhr.responseJSON?.error || '伺服器錯誤') + '</p>');
+                        }
+                    });
+                } else {
+                    $('#attendanceTable').html('<p>請選擇日期和大區以顯示數據</p>');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -5,8 +5,8 @@ import uuid
 import os
 from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel, generate_excel
-from render_table import render_attendance_table, render_stats_table
-from database import init_database, get_six_month_averages, get_event_name, get_event_totals
+from render_table import render_attendance_table, render_average_attendance_table
+from database import init_database, get_six_month_averages, get_event_name, get_event_totals, get_six_month_trimmed_mean, get_six_month_trimmed_mean_by_event
 from user import init_users_collection, create_user, verify_user, create_admin_if_not_exists
 from config import db, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
@@ -359,7 +359,6 @@ def classify_attendance_for_week(week_data):
         main_district_counts[main_district_value] = {'total': 0, 'ages': {age: 0 for age in age_categories}}
 
     for district, names in attended.items():
-        main_district_value = parse_district(district)[0]
         for name in names:
             effective_age = age_mapping.get((district, name), '青職以上')
             district_counts[district]['total'] += 1
@@ -420,6 +419,36 @@ def history():
         return render_template(
             'index.html',
             error="無法載入歷史紀錄頁面",
+            version=get_version_info(),
+            is_anonymous=is_anonymous
+        )
+
+@app.route('/average_attendance')
+def average_attendance():
+    if not is_authenticated():
+        return redirect(url_for('login'))
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if is_anonymous:
+        return render_template('index.html', error="匿名使用者無法查看半年平均出席", version=get_version_info(), is_anonymous=True)
+    
+    try:
+        districts = db[COLLECTION_NAME].distinct("district")
+        main_districts = sorted(
+            set(parse_district(d)[0] for d in districts if parse_district(d)[0]),
+            key=lambda x: chinese_to_int(x[0])
+        )
+        logger.info(f"Loaded main districts for average attendance: {main_districts}")
+        return render_template(
+            'average_attendance.html',
+            main_districts=main_districts,
+            version=get_version_info()
+        )
+    except Exception as e:
+        logger.error(f"Failed to load average attendance page: {str(e)}")
+        return render_template(
+            'index.html',
+            error="無法載入半年平均出席頁面",
             version=get_version_info(),
             is_anonymous=is_anonymous
         )
@@ -574,7 +603,47 @@ def get_history_data(district, week_display):
         logger.error(f"Failed to get history data for {district} on {week_display}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/get_average_attendance_data/<district>/<date>')
+def get_average_attendance_data(district, date):
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
+    
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if is_anonymous:
+        return jsonify({"error": "匿名使用者無法訪問此資源"}), 403
+    
+    try:
+        end_date = datetime.strptime(date, '%Y-%m-%d')
+        # Get all unique event names from the database
+        event_names = db[COLLECTION_NAME].distinct("event_name")
+        logger.debug(f"Retrieved event names: {event_names}")
+        
+        # Get trimmed mean data for all events
+        trimmed_mean_data_list = []
+        for event in event_names:
+            if event == "未指定活動":
+                continue  # Skip default event name
+            data = get_six_month_trimmed_mean_by_event(district, end_date, event)
+            if any(data["districts"].values()) or data["counts"].get(district):
+                trimmed_mean_data_list.append(data)
+        
+        if not trimmed_mean_data_list:
+            logger.warning(f"No average attendance data for {district} up to {date}")
+            return jsonify({
+                'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
+            }), 404
+
+        # Sort by event name to ensure consistent order
+        trimmed_mean_data_list.sort(key=lambda x: x["event_name"])
+        attendance_table_html = render_average_attendance_table(district, end_date, trimmed_mean_data_list)
+        logger.info(f"Rendered average attendance data for {district} up to {date}")
+        return jsonify({'attendance_table': attendance_table_html})
+    except ValueError:
+        logger.error(f"Invalid date format: {date}")
+        return jsonify({"error": "無效的日期格式"}), 400
+    except Exception as e:
+        logger.error(f"Failed to get average attendance data for {district} on {date}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    logger.info(f"Starting server on port {port}")
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=5000)

@@ -1,1 +1,1 @@
-docker ps -a --format "{{.ID}} {{.Command}}" | grep  redis | xargs -r docker rm -f
+docker ps -a --format "{{.ID}} {{.Command}}" | grep  guni | xargs -r docker rm -f

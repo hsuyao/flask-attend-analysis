@@ -266,3 +266,93 @@ def get_event_totals(week_display, main_district):
             "小排": {"total": 0, "districts": {}},
             "晨興": {"total": 0, "districts": {}}
         }
+
+def get_six_month_trimmed_mean(main_district, end_date):
+    # Calculate trimmed mean attendance for '主日' over six months, excluding top and bottom 10%
+    return get_six_month_trimmed_mean_by_event(main_district, end_date, event_name="主日")
+
+def get_six_month_trimmed_mean_by_event(main_district, end_date, event_name):
+    # Calculate trimmed mean attendance per district for a specific event over six months
+    try:
+        logger.debug(f"Calculating trimmed mean for {main_district}, event: {event_name}, up to {end_date}")
+        six_months_ago = end_date - timedelta(days=180)
+        year = six_months_ago.year
+        month = six_months_ago.month
+        week_num = (six_months_ago.day - 1) // 7 + 1
+        week_start = f"{year}年{month:02d}月第{week_num}週"
+        
+        # Get all districts under the main district
+        districts = db[COLLECTION_NAME].distinct("district", {
+            "district": {"$regex": f"^{main_district}"},
+            "event_name": event_name
+        })
+        
+        result = {
+            "districts": {},
+            "main_district": main_district,
+            "counts": {},
+            "event_name": event_name
+        }
+        
+        for district in districts:
+            # Get attendance counts per week
+            pipeline = [
+                {"$match": {
+                    "district": district,
+                    "week_display": {"$gte": week_start},
+                    "event_name": event_name,
+                    "attended": 1
+                }},
+                {"$group": {
+                    "_id": "$week_display",
+                    "count": {"$sum": 1}
+                }}
+            ]
+            weekly_counts = list(db[COLLECTION_NAME].aggregate(pipeline))
+            counts = [r["count"] for r in weekly_counts]
+            
+            if not counts:
+                result["districts"][district] = 0
+                continue
+            
+            # Sort counts and trim top/bottom 10%
+            counts.sort()
+            n = len(counts)
+            trim = int(n * 0.1)
+            trimmed_counts = counts[trim:n-trim] if n > 2 * trim else counts
+            
+            # Calculate mean of trimmed counts and round to integer
+            mean = round(sum(trimmed_counts) / len(trimmed_counts)) if trimmed_counts else 0
+            result["districts"][district] = mean
+        
+        # Aggregate for main district
+        pipeline = [
+            {"$match": {
+                "district": {"$regex": f"^{main_district}"},
+                "week_display": {"$gte": week_start},
+                "event_name": event_name,
+                "attended": 1
+            }},
+            {"$group": {
+                "_id": "$week_display",
+                "count": {"$sum": 1}
+            }}
+        ]
+        weekly_counts = list(db[COLLECTION_NAME].aggregate(pipeline))
+        counts = [r["count"] for r in weekly_counts]
+        
+        if counts:
+            counts.sort()
+            n = len(counts)
+            trim = int(n * 0.1)
+            trimmed_counts = counts[trim:n-trim] if n > 2 * trim else counts
+            mean = round(sum(trimmed_counts) / len(trimmed_counts)) if trimmed_counts else 0
+            result["counts"][main_district] = mean
+        else:
+            result["counts"][main_district] = 0
+        
+        logger.info(f"Trimmed mean for {main_district}, event: {event_name}: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to calculate trimmed mean for {main_district}, event: {event_name}: {str(e)}")
+        return {"districts": {}, "main_district": main_district, "counts": {}, "event_name": event_name}
