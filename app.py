@@ -70,41 +70,57 @@ def process_excel_task(file_contents, file_extensions, task_id, save_to_db=True)
         'latest_main_district': None,
         'latest_main_district_counts': None,
         'all_attendance_data': [],
-        'event_name': "未指定活動"
+        'event_name': "未指定活動",
+        'records_written': 0  # Track number of records written to DB
     }
     
-    for idx, (file_content, file_extension) in enumerate(zip(file_contents, file_extensions)):
-        buffered_stream = BytesIO(file_content)
-        tasks[task_id] = {'state': 'PROGRESS', 'stage': f'Parsing Excel File {idx + 1}', 'progress': 20 + (idx * 20)}
-        result = process_excel(buffered_stream, file_extension, save_to_db=save_to_db)
+    try:
+        for idx, (file_content, file_extension) in enumerate(zip(file_contents, file_extensions)):
+            buffered_stream = BytesIO(file_content)
+            tasks[task_id] = {'state': 'PROGRESS', 'stage': f'Parsing Excel File {idx + 1}', 'progress': 20 + (idx * 20)}
+            result = process_excel(buffered_stream, file_extension, save_to_db=save_to_db)
+            
+            # Log processing result for this file
+            logger.info(f"Processed file {idx + 1}: {result.get('latest_week_display', 'No week display')}, "
+                       f"records to write: {len(result.get('all_records', []))}")
+            
+            if result['latest_attendance_data']:
+                if not combined_result['latest_attendance_data'] or parse_week_display(result['latest_week_display']) > parse_week_display(combined_result['latest_week_display'] or ''):
+                    combined_result['latest_analytic_date'] = result['latest_analytic_date']
+                    combined_result['latest_attendance_data'] = result['latest_attendance_data']
+                    combined_result['latest_week_display'] = result['latest_week_display']
+                    combined_result['latest_district_counts'] = result['latest_district_counts']
+                    combined_result['latest_main_district'] = result['latest_main_district']
+                    combined_result['latest_main_district_counts'] = result['latest_main_district_counts']
+                    combined_result['event_name'] = result['event_name']
+            
+            combined_result['all_attendance_data'].extend(result['all_attendance_data'])
+            combined_result['records_written'] += result.get('records_written', 0)  # Aggregate records written
         
-        if result['latest_attendance_data']:
-            if not combined_result['latest_attendance_data'] or parse_week_display(result['latest_week_display']) > parse_week_display(combined_result['latest_week_display'] or ''):
-                combined_result['latest_analytic_date'] = result['latest_analytic_date']
-                combined_result['latest_attendance_data'] = result['latest_attendance_data']
-                combined_result['latest_week_display'] = result['latest_week_display']
-                combined_result['latest_district_counts'] = result['latest_district_counts']
-                combined_result['latest_main_district'] = result['latest_main_district']
-                combined_result['latest_main_district_counts'] = result['latest_main_district_counts']
-                combined_result['event_name'] = result['event_name']
-        
-        combined_result['all_attendance_data'].extend(result['all_attendance_data'])
-    
-    seen_weeks = set()
-    unique_attendance_data = []
-    for item in sorted(combined_result['all_attendance_data'], key=lambda x: parse_week_display(x[2])):
-        if item[2] not in seen_weeks:
-            seen_weeks.add(item[2])
-            unique_attendance_data.append(item)
-    combined_result['all_attendance_data'] = unique_attendance_data
+        seen_weeks = set()
+        unique_attendance_data = []
+        for item in sorted(combined_result['all_attendance_data'], key=lambda x: parse_week_display(x[2])):
+            if item[2] not in seen_weeks:
+                seen_weeks.add(item[2])
+                unique_attendance_data.append(item)
+        combined_result['all_attendance_data'] = unique_attendance_data
 
-    tasks[task_id] = {
-        'state': 'SUCCESS', 
-        'stage': 'Completed', 
-        'progress': 100, 
-        'result': combined_result
-    }
-    logger.info(f"Excel processing task {task_id} completed successfully")
+        tasks[task_id] = {
+            'state': 'SUCCESS', 
+            'stage': 'Completed', 
+            'progress': 100, 
+            'result': combined_result
+        }
+        logger.info(f"Excel processing task {task_id} completed successfully, {combined_result['records_written']} records written")
+    except Exception as e:
+        tasks[task_id] = {
+            'state': 'FAILURE',
+            'stage': 'Error',
+            'progress': 0,
+            'error': str(e)
+        }
+        logger.error(f"Excel processing task {task_id} failed: {str(e)}")
+        raise
 
 @app.route('/')
 def index():
@@ -213,7 +229,7 @@ def task_result(task_id):
         session['all_attendance_data'] = result.get('all_attendance_data')
         session['latest_main_district'] = result.get('latest_main_district')
         session['event_name'] = result.get('event_name')
-        logger.info(f"Session updated with task result")
+        logger.info(f"Session updated with task result, {result.get('records_written', 0)} records written")
         return jsonify({"status": "success", "redirect": url_for('result')})
     elif task['state'] == 'FAILURE':
         logger.error(f"Task {task_id} failed: {task['error']}")

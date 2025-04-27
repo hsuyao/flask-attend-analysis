@@ -7,9 +7,10 @@ import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from config import START_COLUMN, DB_TYPE
 from utils import chinese_to_int, parse_district, parse_week_display
-from database import get_six_month_averages, bulk_write, find_existing, get_all_latest_attendance_dates
+from database import get_six_month_averages, bulk_write, find_existing, get_all_latest_attendance_dates, get_week_attendance_count
 import time
 import logging
+from pymongo import UpdateOne
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,8 @@ def classify_attendance(sheet, week_col, week_display, placeholder_date, event_n
     max_row = sheet.max_row
     main_district = None
 
+    # First pass: collect all records and classify attendance
+    temp_records = []
     for row in range(3, max_row + 1):
         main_district_value = str(sheet.cell(row, 1).value or "").strip()
         sub_district = str(sheet.cell(row, 2).value or "").strip()
@@ -76,7 +79,7 @@ def classify_attendance(sheet, week_col, week_display, placeholder_date, event_n
         if effective_age not in age_categories:
             effective_age = '青職以上'
 
-        records.append({
+        temp_records.append({
             "name": name,
             "date": placeholder_date.strftime('%Y-%m-%d'),
             "week_display": week_display,
@@ -88,18 +91,33 @@ def classify_attendance(sheet, week_col, week_display, placeholder_date, event_n
 
         if attendance == 1:
             attended.setdefault(district, []).append(name)
-            district_counts.setdefault(district, {'total': 0, 'ages': {age: 0 for age in age_categories}})
-            main_district_counts.setdefault(main_district_value, {'total': 0, 'ages': {age: 0 for age in age_categories}})
-            district_counts[district]['total'] += 1
-            main_district_counts[main_district_value]['total'] += 1
-            district_counts[district]['ages'][effective_age] += 1
-            main_district_counts[main_district_value]['ages'][effective_age] += 1
         else:
             not_attended.setdefault(district, []).append(name)
 
+    # Second pass: filter records by district attendance
+    district_attendance = {}
+    for record in temp_records:
+        district = record["district"]
+        if district not in district_attendance:
+            district_attendance[district] = sum(1 for r in temp_records if r["district"] == district and r["attended"] == 1)
+        if district_attendance[district] == 0:
+            logger.info(f"Skipping district {district} in {week_display} due to zero attendance")
+            continue
+        records.append(record)
+
+        if record["attended"] == 1:
+            district_counts.setdefault(district, {'total': 0, 'ages': {age: 0 for age in age_categories}})
+            main_district_counts.setdefault(main_district, {'total': 0, 'ages': {age: 0 for age in age_categories}})
+            district_counts[district]['total'] += 1
+            main_district_counts[main_district]['total'] += 1
+            district_counts[district]['ages'][record["age_group"]] += 1
+            main_district_counts[main_district]['ages'][record["age_group"]] += 1
+
     total_attendance = sum(d['total'] for d in district_counts.values())
     district_counts['總計'] = total_attendance
-    return attended, not_attended, district_counts, main_district, main_district_counts, records
+    has_attendees = total_attendance > 0
+    logger.info(f"Week {week_display} has attendees: {has_attendees}, total attendance: {total_attendance}")
+    return attended, not_attended, district_counts, main_district, main_district_counts, records, has_attendees
 
 def write_summary(new_sheet, attended, not_attended, week_display, previous_week_data=None):
     logger.info(f"Writing Excel summary for {week_display}")
@@ -167,6 +185,7 @@ def write_summary(new_sheet, attended, not_attended, week_display, previous_week
 def process_excel(file_stream, file_extension, save_to_db=True):
     logger.info(f"Processing Excel file, extension: {file_extension}, save_to_db={save_to_db}")
     start_time = time.time()
+    records_written = 0
 
     file_stream.seek(0)
     file_content = file_stream.read()
@@ -207,7 +226,8 @@ def process_excel(file_stream, file_extension, save_to_db=True):
             'latest_main_district': None,
             'latest_main_district_counts': None,
             'all_attendance_data': [],
-            'event_name': event_name
+            'event_name': event_name,
+            'records_written': 0
         }
 
     all_attendance_data = []
@@ -219,7 +239,6 @@ def process_excel(file_stream, file_extension, save_to_db=True):
     latest_main_district_counts = None
     all_records = []
     all_names = set()
-    existing_cache = set()
 
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
@@ -228,10 +247,9 @@ def process_excel(file_stream, file_extension, save_to_db=True):
         placeholder_date = datetime(year, month_num, 1)
         week_display = f"{month_prefix}{week_name}"
 
-        attended, not_attended, district_counts, main_district, main_district_counts, records = classify_attendance(
+        attended, not_attended, district_counts, main_district, main_district_counts, records, has_attendees = classify_attendance(
             input_sheet, col, week_display, placeholder_date, event_name
         )
-        records = [r for r in records if (r["name"], r["week_display"]) not in existing_cache]
         all_records.extend(records)
         if main_district and not latest_main_district:
             latest_main_district = main_district
@@ -241,31 +259,70 @@ def process_excel(file_stream, file_extension, save_to_db=True):
         for district in not_attended:
             all_names.update(not_attended[district])
 
-        if not any(attended.values()):
-            logger.info(f"No attendees for {week_display}")
-            continue
-
         all_attendance_data.append((placeholder_date, {'attended': attended, 'not_attended': not_attended}, week_display, event_name))
 
-        latest_attended = attended
-        latest_not_attended = not_attended
-        latest_week = week_display
-        latest_districts = district_counts
-        latest_main_district_counts = main_district_counts
+        if has_attendees or not latest_attended:
+            latest_attended = attended
+            latest_not_attended = not_attended
+            latest_week = week_display
+            latest_districts = district_counts
+            latest_main_district_counts = main_district_counts
 
     all_attendance_data.sort(key=lambda x: parse_week_display(x[2]))
 
     if save_to_db and all_records and all_names:
         week_displays = list(set(r["week_display"] for r in all_records))
+        logger.debug(f"Checking existing records for {len(all_names)} names and {len(week_displays)} week_displays")
         existing_keys = find_existing(list(all_names), week_displays, event_names=[event_name])
-        existing_cache.update((name, week, evt) for name, week, evt in existing_keys)
-        
-        new_records = [r for r in all_records if (r["name"], r["week_display"], r["event_name"]) not in existing_cache]
-        if new_records:
-            logger.info(f"Writing {len(new_records)} new records")
-            bulk_write(new_records)
+        existing_cache = set((name, week, evt) for name, week, evt in existing_keys)
 
-        if latest_week:
+        operations = []
+        for week_data in all_attendance_data:
+            _, data, week_display, evt_name = week_data
+            has_attendees = any(data['attended'].values())
+            if not has_attendees:
+                logger.info(f"Skipping week {week_display} due to no attendees")
+                continue
+
+            # Check attendance count in database for each district
+            week_records = [r for r in all_records if r["week_display"] == week_display and r["event_name"] == evt_name]
+            districts = set(r["district"] for r in week_records)
+            for district in districts:
+                db_attendance_count = get_week_attendance_count(week_display, district, evt_name)
+                logger.debug(f"DB attendance count for {week_display}, {district}: {db_attendance_count}")
+                district_records = [r for r in week_records if r["district"] == district]
+                
+                for record in district_records:
+                    key = (record["name"], week_display, evt_name)
+                    if db_attendance_count == 0 or key not in existing_cache:
+                        # Overwrite if no attendance in DB or record doesn't exist
+                        operations.append(UpdateOne(
+                            {
+                                "name": record["name"],
+                                "week_display": week_display,
+                                "event_name": evt_name
+                            },
+                            {"$set": record},
+                            upsert=True
+                        ))
+                        logger.debug(f"Added UpdateOne for {record['name']} in {week_display}, {district} "
+                                    f"(DB attendance: {db_attendance_count}, exists: {key in existing_cache})")
+
+        logger.info(f"Prepared {len(operations)} bulk operations")
+        if operations:
+            try:
+                bulk_result = bulk_write(operations)
+                if bulk_result:
+                    records_written += bulk_result.inserted_count + bulk_result.modified_count
+                    logger.info(f"Bulk write result: {bulk_result.inserted_count} inserted, "
+                               f"{bulk_result.modified_count} modified, {bulk_result.matched_count} matched")
+                else:
+                    logger.warning("No records written in bulk_write")
+            except Exception as e:
+                logger.error(f"Failed to write records: {str(e)}")
+                raise
+
+        if latest_week and latest_attended:
             supplement_start = time.time()
             existing_keys = find_existing(list(all_names), [latest_week], event_names=[event_name])
             existing_cache.update((name, week, evt) for name, week, evt in existing_keys)
@@ -273,22 +330,43 @@ def process_excel(file_stream, file_extension, save_to_db=True):
             missing_records = []
             for name in all_names:
                 if (name, latest_week, event_name) not in existing_cache:
-                    district = next((d for d in attended if name in attended.get(d, [])), None) or \
-                              next((d for d in not_attended if name in not_attended.get(d, [])), None) or "未知區"
-                    missing_records.append({
-                        "name": name,
-                        "date": datetime.now().strftime("%Y-%m-%d"),
-                        "week_display": latest_week,
-                        "attended": 0,
-                        "district": district,
-                        "age_group": "未知",
-                        "event_name": event_name
-                    })
+                    district = next((d for d in latest_attended if name in latest_attended.get(d, [])), None) or \
+                              next((d for d in latest_not_attended if name in latest_not_attended.get(d, [])), None) or "未知區"
+                    db_attendance_count = get_week_attendance_count(latest_week, district, event_name)
+                    if db_attendance_count == 0:
+                        missing_records.append({
+                            "name": name,
+                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            "week_display": latest_week,
+                            "attended": 0,
+                            "district": district,
+                            "age_group": "未知",
+                            "event_name": event_name
+                        })
+                        logger.debug(f"Added missing record for {name} in {latest_week}, {district} "
+                                    f"(DB attendance: {db_attendance_count})")
 
             if missing_records:
                 logger.info(f"Writing {len(missing_records)} missing records")
-                bulk_write(missing_records)
-                logger.info(f"Bulk wrote {len(missing_records)} missing records for {latest_week}")
+                try:
+                    bulk_result = bulk_write([UpdateOne(
+                        {
+                            "name": r["name"],
+                            "week_display": r["week_display"],
+                            "event_name": r["event_name"]
+                        },
+                        {"$set": r},
+                        upsert=True
+                    ) for r in missing_records])
+                    if bulk_result:
+                        records_written += bulk_result.inserted_count + bulk_result.modified_count
+                        logger.info(f"Wrote {bulk_result.inserted_count} missing records, "
+                                  f"{bulk_result.modified_count} modified for {latest_week}")
+                    else:
+                        logger.warning("No missing records written in bulk_write")
+                except Exception as e:
+                    logger.error(f"Failed to write missing records: {str(e)}")
+                    raise
 
             supplement_elapsed = time.time() - supplement_start
             logger.info(f"Missing records supplement completed in {supplement_elapsed:.2f}s")
@@ -303,11 +381,12 @@ def process_excel(file_stream, file_extension, save_to_db=True):
             'latest_main_district': None,
             'latest_main_district_counts': None,
             'all_attendance_data': [],
-            'event_name': event_name
+            'event_name': event_name,
+            'records_written': 0
         }
 
     total_elapsed = time.time() - start_time
-    logger.info(f"Excel processing completed in {total_elapsed:.2f}s")
+    logger.info(f"Excel processing completed in {total_elapsed:.2f}s, {records_written} records written")
     return {
         'latest_analytic_date': datetime.now().strftime("%Y年%m月%d日"),
         'latest_attendance_data': {'attended': latest_attended, 'not_attended': latest_not_attended} if latest_attended else None,
@@ -316,7 +395,8 @@ def process_excel(file_stream, file_extension, save_to_db=True):
         'latest_main_district': latest_main_district,
         'latest_main_district_counts': latest_main_district_counts,
         'all_attendance_data': all_attendance_data,
-        'event_name': event_name
+        'event_name': event_name,
+        'records_written': records_written
     }
 
 def generate_excel(all_attendance_data):

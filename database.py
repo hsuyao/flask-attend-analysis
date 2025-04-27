@@ -58,32 +58,18 @@ def init_database():
     except Exception as e:
         logger.error(f"Failed to set default event_name: {str(e)}")
 
-def bulk_write(records):
-    # Perform bulk write operations to insert or update records
+def bulk_write(operations):
+    # Perform bulk write operations (InsertOne, UpdateOne, DeleteMany)
     try:
-        operations = []
-        for record in records:
-            if not record.get("name") or not record.get("week_display") or not record.get("event_name"):
-                logger.warning(f"Skipping invalid record: {record}")
-                continue
-            # Use upsert to update existing record or insert new one
-            operations.append(UpdateOne(
-                {
-                    "name": record["name"],
-                    "week_display": record["week_display"],
-                    "event_name": record["event_name"]
-                },
-                {"$set": record},
-                upsert=True
-            ))
-        
-        if operations:
-            result = db[COLLECTION_NAME].bulk_write(operations)
-            logger.info(f"Bulk write completed: {result.bulk_api_result}")
-            return result
-        else:
-            logger.info("No valid records to write")
+        if not operations:
+            logger.info("No operations to execute in bulk write")
             return None
+        
+        result = db[COLLECTION_NAME].bulk_write(operations, ordered=False)
+        logger.info(f"Bulk write completed: {result.bulk_api_result}, "
+                   f"inserted={result.inserted_count}, modified={result.modified_count}, "
+                   f"deleted={result.deleted_count}, matched={result.matched_count}")
+        return result
     except Exception as e:
         logger.error(f"Failed to perform bulk write: {str(e)}")
         raise
@@ -117,6 +103,30 @@ def find_existing(names, week_display, event_names=None):
     except Exception as e:
         logger.error(f"Failed to find existing records: {str(e)}")
         raise
+
+def get_week_attendance_count(week_display, district, event_name):
+    # Get the total number of attended records for a specific week_display, district, and event_name
+    try:
+        logger.debug(f"Querying attendance count for week_display: {week_display}, district: {district}, event_name: {event_name}")
+        result = db[COLLECTION_NAME].aggregate([
+            {"$match": {
+                "week_display": week_display,
+                "district": district,
+                "event_name": event_name,
+                "attended": 1
+            }},
+            {"$group": {
+                "_id": None,
+                "total_attended": {"$sum": 1}
+            }}
+        ])
+        result = list(result)
+        total_attended = result[0]["total_attended"] if result else 0
+        logger.debug(f"Attendance count for {week_display}, {district}, {event_name}: {total_attended}")
+        return total_attended
+    except Exception as e:
+        logger.error(f"Failed to get attendance count for {week_display}, {district}, {event_name}: {str(e)}")
+        return 0
 
 def get_all_latest_attendance_dates(names=None, placeholder_date=None):
     # Get latest week_display for each name, optionally filtered by names and date
