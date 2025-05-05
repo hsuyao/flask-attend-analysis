@@ -71,7 +71,8 @@ def process_excel_task(file_contents, file_extensions, task_id, save_to_db=True)
         'latest_main_district_counts': None,
         'all_attendance_data': [],
         'event_name': "未指定活動",
-        'records_written': 0  # Track number of records written to DB
+        'records_written': 0,
+        'week_avg_rates': {}  # Store per-week attendance rates
     }
     
     try:
@@ -95,7 +96,8 @@ def process_excel_task(file_contents, file_extensions, task_id, save_to_db=True)
                     combined_result['event_name'] = result['event_name']
             
             combined_result['all_attendance_data'].extend(result['all_attendance_data'])
-            combined_result['records_written'] += result.get('records_written', 0)  # Aggregate records written
+            combined_result['records_written'] += result.get('records_written', 0)
+            combined_result['week_avg_rates'].update(result.get('week_avg_rates', {}))
         
         seen_weeks = set()
         unique_attendance_data = []
@@ -229,6 +231,7 @@ def task_result(task_id):
         session['all_attendance_data'] = result.get('all_attendance_data')
         session['latest_main_district'] = result.get('latest_main_district')
         session['event_name'] = result.get('event_name')
+        session['week_avg_rates'] = result.get('week_avg_rates', {})
         logger.info(f"Session updated with task result, {result.get('records_written', 0)} records written")
         return jsonify({"status": "success", "redirect": url_for('result')})
     elif task['state'] == 'FAILURE':
@@ -250,6 +253,7 @@ def result():
     all_attendance_data = session.get('all_attendance_data', [])
     event_name = session.get('event_name', "未指定活動")
     latest_main_district = session.get('latest_main_district', '')
+    week_avg_rates = session.get('week_avg_rates', {})
 
     if not latest_attendance_data or not latest_attendance_data.get('attended'):
         logger.error("No valid attendance data found in session")
@@ -282,10 +286,11 @@ def result():
         all_names.update(sunday_attendance_data['attended'][district])
     for district in sunday_attendance_data['not_attended']:
         all_names.update(sunday_attendance_data['not_attended'][district])
-    avg_attendance_rates = session.get('avg_attendance_rates')
+    avg_attendance_rates = week_avg_rates.get(sunday_week_display)
     if not avg_attendance_rates and not is_anonymous:
-        avg_attendance_rates = get_six_month_averages(list(all_names), placeholder_date)
-        session['avg_attendance_rates'] = avg_attendance_rates
+        avg_attendance_rates = get_six_month_averages(list(all_names), sunday_week_display)
+        week_avg_rates[sunday_week_display] = avg_attendance_rates
+        session['week_avg_rates'] = week_avg_rates
 
     event_totals = get_event_totals(sunday_week_display, sunday_main_district) if not is_anonymous else {}
 
@@ -316,6 +321,7 @@ def get_week_data(week_idx):
     
     is_anonymous = session.get('user', {}).get('role') == 'anonymous'
     all_attendance_data = session.get('all_attendance_data', [])
+    week_avg_rates = session.get('week_avg_rates', {})
     if not all_attendance_data or week_idx < 0 or week_idx >= len(all_attendance_data):
         return jsonify({
             'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>No data</th></tr></table></div>'
@@ -334,10 +340,11 @@ def get_week_data(week_idx):
         all_names.update(attendance_data['attended'][district])
     for district in attendance_data['not_attended']:
         all_names.update(attendance_data['not_attended'][district])
-    avg_attendance_rates = session.get('avg_attendance_rates')
+    avg_attendance_rates = week_avg_rates.get(week_name)
     if not avg_attendance_rates and not is_anonymous:
-        avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
-        session['avg_attendance_rates'] = avg_attendance_rates
+        avg_attendance_rates = get_six_month_averages(list(all_names), week_name)
+        week_avg_rates[week_name] = avg_attendance_rates
+        session['week_avg_rates'] = week_avg_rates
 
     event_totals = get_event_totals(week_name, main_district) if not is_anonymous else {}
 
@@ -598,7 +605,12 @@ def get_history_data(district, week_display):
             all_names.update(attended[sub_district])
         for sub_district in not_attended:
             all_names.update(not_attended[sub_district])
-        avg_attendance_rates = get_six_month_averages(list(all_names), datetime.now())
+        week_avg_rates = session.get('week_avg_rates', {})
+        avg_attendance_rates = week_avg_rates.get(week_display)
+        if not avg_attendance_rates and not is_anonymous:
+            avg_attendance_rates = get_six_month_averages(list(all_names), week_display)
+            week_avg_rates[week_display] = avg_attendance_rates
+            session['week_avg_rates'] = week_avg_rates
 
         event_name = get_event_name(week_display)
         event_totals = get_event_totals(week_display, district)

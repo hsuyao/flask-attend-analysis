@@ -172,26 +172,37 @@ def get_all_latest_attendance_dates(names=None, placeholder_date=None):
         logger.error(f"Failed to get latest attendance dates: {str(e)}")
         raise
 
-def get_six_month_averages(names, end_date):
-    # Calculate six-month attendance averages
+def get_six_month_averages(names, week_display):
+    # Calculate six-month attendance averages based on week_display
     try:
         # Ensure names is a list
         if isinstance(names, set):
             names = list(names)
+        if not isinstance(names, list):
+            raise ValueError(f"names must be a list, got {type(names)}")
         
-        # Calculate six months ago
-        six_months_ago = end_date - timedelta(days=180)
+        # Parse week_display to get year, month, and week
+        parsed_week = parse_week_display(week_display)
+        if parsed_week == (0, 0, 0):
+            logger.warning(f"Invalid week_display: {week_display}")
+            return {}
         
-        # Convert end_date to week_display format (e.g., "2025年4月第一週")
-        year = six_months_ago.year
-        month = six_months_ago.month
-        week_num = (six_months_ago.day - 1) // 7 + 1
-        week_start = f"{year}年{month:02d}月第{week_num}週"
+        year, month, week = parsed_week
+        # Estimate the start of the week (approximate)
+        week_date = datetime(year, month, 1) + timedelta(days=(week - 1) * 7)
+        six_months_ago = week_date - timedelta(days=180)  # Roughly 26 weeks
+        
+        # Convert six_months_ago to week_display format
+        start_year = six_months_ago.year
+        start_month = six_months_ago.month
+        start_week_num = (six_months_ago.day - 1) // 7 + 1
+        week_start = f"{start_year}年{start_month:02d}月第{start_week_num}週"
         
         pipeline = [
             {"$match": {
                 "name": {"$in": names},
-                "week_display": {"$gte": week_start}
+                "week_display": {"$gte": week_start, "$lte": week_display},
+                "event_name": "主日"  # Only consider 主日 events
             }},
             {"$group": {
                 "_id": "$name",
@@ -199,9 +210,12 @@ def get_six_month_averages(names, end_date):
             }}
         ]
         results = db[COLLECTION_NAME].aggregate(pipeline)
-        return {r["_id"]: r["attendance_rate"] for r in results}
+        avg_rates = {r["_id"]: r["attendance_rate"] for r in results}
+        
+        # Ensure all names have a rate (0 if no records)
+        return {name: avg_rates.get(name, 0.0) for name in names}
     except Exception as e:
-        logger.error(f"Failed to calculate six-month averages: {str(e)}")
+        logger.error(f"Failed to calculate six-month averages for week_display {week_display}: {str(e)}")
         return {}
 
 def get_event_name(week_display):

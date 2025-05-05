@@ -149,8 +149,7 @@ def write_summary(new_sheet, attended, not_attended, week_display, previous_week
     all_names = set()
     for district in districts:
         all_names.update(attended.get(district, []) + not_attended.get(district, []))
-    placeholder_date = datetime.now()
-    avg_rates = get_six_month_averages(list(all_names), placeholder_date)
+    avg_rates = get_six_month_averages(list(all_names), week_display)
 
     for i, district in enumerate(districts):
         attended_list = attended.get(district, [])
@@ -227,7 +226,8 @@ def process_excel(file_stream, file_extension, save_to_db=True):
             'latest_main_district_counts': None,
             'all_attendance_data': [],
             'event_name': event_name,
-            'records_written': 0
+            'records_written': 0,
+            'week_avg_rates': {}  # Added to store per-week attendance rates
         }
 
     all_attendance_data = []
@@ -239,6 +239,7 @@ def process_excel(file_stream, file_extension, save_to_db=True):
     latest_main_district_counts = None
     all_records = []
     all_names = set()
+    week_avg_rates = {}  # Store attendance rates per week
 
     for col, week_name, month_prefix in week_cols:
         logger.info(f"Processing week: {week_name} in {month_prefix}")
@@ -254,10 +255,17 @@ def process_excel(file_stream, file_extension, save_to_db=True):
         if main_district and not latest_main_district:
             latest_main_district = main_district
 
+        week_names = set()
         for district in attended:
-            all_names.update(attended[district])
+            week_names.update(attended[district])
         for district in not_attended:
-            all_names.update(not_attended[district])
+            week_names.update(not_attended[district])
+        all_names.update(week_names)
+
+        # Calculate attendance rates for this week
+        if week_names:
+            week_avg_rates[week_display] = get_six_month_averages(list(week_names), week_display)
+            logger.debug(f"Calculated attendance rates for {week_display}: {week_avg_rates[week_display]}")
 
         all_attendance_data.append((placeholder_date, {'attended': attended, 'not_attended': not_attended}, week_display, event_name))
 
@@ -382,7 +390,8 @@ def process_excel(file_stream, file_extension, save_to_db=True):
             'latest_main_district_counts': None,
             'all_attendance_data': [],
             'event_name': event_name,
-            'records_written': 0
+            'records_written': 0,
+            'week_avg_rates': {}
         }
 
     total_elapsed = time.time() - start_time
@@ -396,7 +405,8 @@ def process_excel(file_stream, file_extension, save_to_db=True):
         'latest_main_district_counts': latest_main_district_counts,
         'all_attendance_data': all_attendance_data,
         'event_name': event_name,
-        'records_written': records_written
+        'records_written': records_written,
+        'week_avg_rates': week_avg_rates
     }
 
 def generate_excel(all_attendance_data):
