@@ -2,6 +2,7 @@ from config import logger, db, COLLECTION_NAME
 from utils import chinese_to_int, parse_district, parse_week_display
 from database import get_six_month_averages, get_all_latest_attendance_dates, get_six_month_trimmed_mean_by_event
 from datetime import datetime
+from datetime import timedelta
 
 def render_stats_table(main_district, district_counts, main_district_counts, event_name="未指定活動", is_history_page=False, event_totals=None):
     age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
@@ -250,4 +251,136 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
 
     html += '</table>\n</div>\n'
     html += '</div>\n</div>\n'
+    return html
+
+def render_average_attendance_table(main_district, end_date, trimmed_mean_data_list):
+    """
+    Build the HTML table that shows each person’s 6-month average attendance rate
+    for the given `main_district`, using `end_date` as the right edge of the window.
+
+    Parameters
+    ----------
+    main_district : str
+        The target main district (e.g. "二大區").
+    end_date : datetime.datetime
+        The end date chosen by the user; the query looks back 180 days.
+    trimmed_mean_data_list : list[dict]
+        Output of `get_six_month_trimmed_mean_by_event`, already filtered
+        for the same main district and date window.
+
+    Returns
+    -------
+    str
+        Rendered HTML snippet.
+    """
+    # ------------------------------------------------------------------
+    # 1. Compute the 6-month window [start_date, end_date]
+    # ------------------------------------------------------------------
+    six_months_ago = end_date - timedelta(days=180)
+    start_date_str = six_months_ago.strftime('%Y-%m-%d')
+    end_date_str   = end_date.strftime('%Y-%m-%d')
+
+    # ------------------------------------------------------------------
+    # 2. Query MongoDB for each person’s average attendance over the window
+    # ------------------------------------------------------------------
+    pipeline = [
+        {"$match": {
+            "district":  {"$regex": f"^{main_district}"},
+            "event_name": "主日",
+            "date":      {"$gte": start_date_str, "$lte": end_date_str}
+        }},
+        {"$group": {
+            "_id": {"district": "$district", "name": "$name"},
+            "attendance_rate": {
+                "$avg": {"$cond": [{"$eq": ["$attended", 1]}, 1, 0]}
+            }
+        }}
+    ]
+    name_records = list(db[COLLECTION_NAME].aggregate(pipeline))
+
+    # Collect sub-districts under the main district and sort them
+    districts = sorted(
+        {r["_id"]["district"]
+         for r in name_records
+         if r["_id"]["district"].startswith(main_district)},
+        key=parse_district
+    )
+    if not districts:
+        return ('<div class="district-section"><table class="excel-table">'
+                '<tr class="title-row"><th>No data</th></tr></table></div>')
+
+    # Map each sub-district to a sorted list of (name, rate) pairs
+    district_names = {d: [] for d in districts}
+    for rec in name_records:
+        d = rec["_id"]["district"]
+        if d in district_names:
+            district_names[d].append((rec["_id"]["name"], rec["attendance_rate"]))
+    for d in district_names:
+        district_names[d].sort(key=lambda x: -x[1])          # descending
+
+    # ------------------------------------------------------------------
+    # 3. Build the left-hand table (names + rates)
+    # ------------------------------------------------------------------
+    max_len            = max(len(lst) for lst in district_names.values())
+    num_sub_districts  = len(districts)
+    total_cols         = num_sub_districts * 2
+
+    html = (
+        '<div class="district-section">\n'
+        f'<h2>{main_district} — 6-Month Avg Attendance (through {end_date_str})</h2>\n'
+        f'<div class="district-container flex-container" '
+        f'style="--num-sub-districts:{num_sub_districts}; --num-districts:{num_sub_districts + 1};">\n'
+        f'<div class="table-wrapper attendance-wrapper flex-item" '
+        f'style="--num-sub-districts:{num_sub_districts};">\n'
+        '<table class="excel-table">\n'
+        f'<tr class="header"><th colspan="{total_cols}">{main_district}</th></tr>\n'
+        '<tr class="district-row">\n'
+    )
+    for d in districts:
+        html += f'<th colspan="2">{d}</th>'
+    html += '</tr>\n<tr class="subheader">\n'
+    html += ''.join('<th>Name</th><th>Rate</th>' for _ in districts)
+    html += '</tr>\n'
+
+    for r in range(max_len):
+        row_cls = "even" if r % 2 == 0 else "odd"
+        html += f'<tr class="{row_cls}">\n'
+        for d in districts:
+            name, rate = district_names[d][r] if r < len(district_names[d]) else ('', 0.0)
+            display    = name[:4] if len(name) > 4 else name
+            html += f'<td>{display}</td><td>{rate:.0%}</td>'
+        html += '</tr>\n'
+    html += '</table>\n</div>\n'
+
+    # ------------------------------------------------------------------
+    # 4. Build the right-hand stats table (trimmed means for each event)
+    # ------------------------------------------------------------------
+    num_districts = num_sub_districts + 2  # main + subs + label
+    html += (
+        f'<div class="table-wrapper stats-wrapper flex-item" '
+        f'style="--num-districts:{num_districts};">\n'
+        '<table class="excel-table">\n'
+        '<tr class="header"><th style="min-width:2em">Avg</th>'
+        f'<th style="min-width:1em">{main_district}</th>'
+    )
+    for d in districts:
+        html += f'<th style="min-width:1em">{d}</th>'
+    html += '</tr>\n'
+
+    # Each row represents one event: 主日, 禱告, 晨興, 小排…
+    for i, data in enumerate(trimmed_mean_data_list):
+        # Skip completely empty rows
+        if not any(data["districts"].values()) and not data["counts"].get(main_district):
+            continue
+        row_cls = "even" if i % 2 == 0 else "odd"
+        html += (
+            f'<tr class="{row_cls}"><td style="min-width:2em">{data["event_name"]}</td>'
+            f'<td style="min-width:1em">{data["counts"].get(main_district, 0)}</td>'
+        )
+        for d in districts:
+            html += f'<td style="min-width:1em">{data["districts"].get(d, 0)}</td>'
+        html += '</tr>\n'
+
+    html += '</table>\n</div>\n'   # end stats-wrapper
+    html += '</div>\n</div>\n'     # end container / section
     return html

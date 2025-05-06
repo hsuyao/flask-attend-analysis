@@ -12,11 +12,13 @@ from config import db, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
 import logging
+from admin_routes import admin_bp
 
 app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 Session(app)
+app.register_blueprint(admin_bp)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
