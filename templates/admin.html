@@ -15,24 +15,24 @@
 <body>
 <div class="container">
   <h2>資料庫管理 (Admin)</h2>
-
-  <!-- Import / Export / Delete Selected -->
-  <div class="mb-3">
-    <input id="importFile" type="file" accept=".csv">
-    <button class="button" onclick="importCSV()">匯入</button>
+  <!-- 1. 檔案選擇 & 匯入 / 匯出 -->
+  <div class="mb-3 d-flex align-items-center">
+    <input id="importFile" type="file" accept=".csv" class="me-2">
+    <button class="button me-2" onclick="importCSV()">匯入</button>
     <a class="button" href="/admin/export">匯出 CSV</a>
-    <button class="button btn-danger" id="delSelBtn" onclick="deleteSelected()" disabled>刪除選取</button>
-    <a class="button" href="{{ url_for('index') }}">返回首頁</a>
-    <!-- 新增：使用者管理 -->
+  </div>
+
+  <!-- 2. 使用者管理 -->
+  <div class="mb-3">
     <a class="button" href="{{ url_for('admin_bp.admin_users') }}">使用者管理</a>
   </div>
-  <!-- db status -->
+  <!-- 3. 資料庫狀態 -->
   <div id="dbStatus" class="alert alert-info py-2 px-3" role="alert">
     正在讀取資料庫狀態…
   </div>
 
-  <!-- Filters -->
-  <div class="row filter-row mb-2">
+  <!-- 4. 搜尋選項介面 + 執行搜尋 & 刪除選取 -->
+  <div class="row filter-row mb-3 align-items-center">  
     <div class="col-auto"><input id="nameKw"  class="form-control" placeholder="姓名關鍵字"></div>
     <div class="col-auto"><input id="startDt" type="date" class="form-control"></div>
     <div class="col-auto"><input id="endDt"   type="date" class="form-control"></div>
@@ -49,10 +49,10 @@
       </select>
     </div>
     <div class="col-auto">
-      <button class="button" onclick="loadPage(1)">搜尋</button>
+      <button class="button me-2" onclick="loadPage(1)">搜尋</button>
+      <button class="button btn-danger" id="delSelBtn" onclick="deleteSelected()" disabled>刪除選取</button>
     </div>
   </div>
-
   <!-- Table -->
   <div class="table-container">
     <table class="excel-table" id="dataTable">
@@ -71,10 +71,16 @@
       <tbody></tbody>
     </table>
   </div>
-
+  <!-- 5. 資料庫內容 -->
   <!-- Pagination -->
   <nav><ul class="pagination" id="pager"></ul></nav>
+
+  <!-- 6. 返回首頁 -->
+  <div class="mt-3">
+    <a class="button" href="{{ url_for('index') }}">返回首頁</a>
+  </div>
 </div>
+
 <footer style="text-align:center;margin-top:20px;">版本: {{ version }}</footer>
 
 <script>
