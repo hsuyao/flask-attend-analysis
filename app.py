@@ -526,12 +526,12 @@ def get_history_data(district, week_display):
         records_list = list(records)
         logger.debug(f"Fetched {len(records_list)} records for {district} on {week_display} with event_name: 主日")
 
+        # ─────────────────────────────────────────
+        # Return empty table even the lord day is missing
+        # ─────────────────────────────────────────
+        missing_sunday = False
         if not records_list:
-            logger.warning(f"No records found for {district} on {week_display} with event_name: 主日")
-            return jsonify({
-                'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
-            }), 404
-
+            missing_sunday = True         # missing sunday
         attended = {}
         not_attended = {}
         district_counts = {}
@@ -566,6 +566,14 @@ def get_history_data(district, week_display):
 
         total_attendance = sum(d['total'] for d in district_counts.values())
         district_counts['總計'] = total_attendance
+
+        # if missing sunday, give zeros  
+        if missing_sunday:
+            age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
+            district_counts = { '總計': 0 }
+            main_district_counts = { district: {'total':0, 'ages':{age:0 for age in age_categories}} }
+            attendance_data = {'attended': {}, 'not_attended': {}}
+            all_attendance_data = [(datetime.now(), attendance_data, week_display, None)]
 
         all_weeks = db[COLLECTION_NAME].distinct("week_display", {
             "district": {"$regex": f"^{district}"},
@@ -617,8 +625,10 @@ def get_history_data(district, week_display):
             week_avg_rates[week_display] = avg_attendance_rates
             session['week_avg_rates'] = week_avg_rates
 
-        event_name = get_event_name(week_display)
-        event_totals = get_event_totals(week_display, district)
+        event_name = "缺少主日數據" if missing_sunday else get_event_name(week_display)
+        event_totals = {} if missing_sunday else get_event_totals(week_display, district)
+
+
         logger.debug(f"Event name for {week_display} in district {district}: {event_name}")
         logger.info(f"Passing event_totals to render for {week_display}, {district}: {event_totals}")
 

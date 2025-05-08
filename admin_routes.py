@@ -5,7 +5,7 @@ from io import StringIO, BytesIO
 from datetime import datetime, timedelta
 from bson import ObjectId
 from pymongo import UpdateOne
-import csv, re
+import csv, re, os, math
 
 from config import db, COLLECTION_NAME
 from utils import parse_week_display   # 若後續用不到可移除
@@ -163,3 +163,21 @@ def admin_import():
         db[COLLECTION_NAME].bulk_write(ops, ordered=False)
     return jsonify({"imported": count})
 
+@admin_bp.route("/db_status")
+def admin_db_status():
+    if not is_admin():
+        return jsonify({"error": "forbidden"}), 403
+
+    # MongoDB dbStats
+    stats = db.command("dbStats")
+    storage_mb = stats["storageSize"] / (1024 * 1024)          # 已用 MB
+    quota_mb   = float(os.getenv("DB_QUOTA_MB", 512))          # 預設 512 MB，可用環境變數覆蓋
+    remain_mb  = max(0.0, quota_mb - storage_mb)
+
+    return jsonify({
+        "storage_mb": round(storage_mb, 1),
+        "quota_mb":   quota_mb,
+        "remain_mb":  round(remain_mb, 1),
+        "collections": stats["collections"],
+        "objects":     stats["objects"]
+    })

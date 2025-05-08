@@ -24,6 +24,10 @@
     <button class="button btn-danger" id="delSelBtn" onclick="deleteSelected()" disabled>刪除選取</button>
     <a class="button" href="{{ url_for('index') }}">返回首頁</a>
   </div>
+  <!-- db status -->
+  <div id="dbStatus" class="alert alert-info py-2 px-3" role="alert">
+    正在讀取資料庫狀態…
+  </div>
 
   <!-- Filters -->
   <div class="row filter-row mb-2">
@@ -165,6 +169,22 @@ $('#dataTable th[data-field]').on('click',function(){
 });
 
 $(document).ready(()=>loadPage(1));
+
+function loadDbStatus(){
+  $.getJSON('/admin/db_status', res=>{
+      $('#dbStatus').text(
+        `資料庫已用 ${res.storage_mb} MB / ${res.quota_mb} MB，`+
+        `剩餘 ${res.remain_mb} MB ｜ `+
+        `Collections: ${res.collections} ｜ Documents: ${res.objects}`
+      );
+  }).fail(()=>$('#dbStatus').text('無法取得資料庫狀態'));
+}
+
+$(document).ready(()=>{
+    loadDbStatus();   // ← 先載入 DB 狀態
+    loadPage(1);      // ← 再載入資料表
+});
+
 </script>
 </body>
 </html>

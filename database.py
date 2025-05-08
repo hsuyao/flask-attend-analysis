@@ -219,22 +219,34 @@ def get_six_month_averages(names, week_display):
         return {}
 
 def get_event_name(week_display):
-    # Get the event name associated with a specific week_display
+    """
+    Return the event name for the given week_display.
+    Preference order: 主日 → 其它(第一筆) → 未指定活動
+    """
     try:
-        logger.debug(f"Querying event name for week_display: {week_display}")
+        # ① 最優先：主日
+        record = db[COLLECTION_NAME].find_one(
+            {"week_display": week_display, "event_name": "主日"},
+            {"event_name": 1}
+        )
+        if record:
+            return "主日"
+
+        # ② 次選：該週第一筆文件的 event_name
         record = db[COLLECTION_NAME].find_one(
             {"week_display": week_display},
             {"event_name": 1}
         )
-        if not record:
-            logger.warning(f"No record found for week_display: {week_display}")
-            return "未指定活動"
-        event_name = record.get("event_name", "未指定活動")
-        logger.debug(f"Retrieved event name for {week_display}: {event_name}")
-        return event_name
+        if record and record.get("event_name"):
+            return record["event_name"]
+
+        # ③ 都沒有 → 預設
+        return "未指定活動"
+
     except Exception as e:
         logger.error(f"Failed to get event name for {week_display}: {str(e)}")
         return "未指定活動"
+
 
 def get_event_totals(week_display, main_district):
     # Get total attendance counts for '禱告', '小排', '晨興' for a specific week_display and main_district
