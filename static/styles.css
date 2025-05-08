@@ -16,6 +16,12 @@ body {
     width: 100%; /* Allow full width */
 }
 
+.container.upload-page {
+    max-width: 360px; 
+    width: 100%;
+    margin: 0 auto; 
+}
+
 h2 {
     text-align: center !important;
     color: #333;
@@ -180,11 +186,25 @@ h2 {
 }
 
 .button-container {
-    text-align: center;
-    margin: 10px 0;
+    max-width: 360px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.button.admin {
+    background-color: #dc3545;    /* red */
+}
+
+.button.admin:hover {
+    background-color: #b02a37;    /* dark red */
 }
 
 .button {
+    width: 100%;
+    text-align: center;
     display: inline-block;
     padding: 8px 16px;
     margin: 10px 5px;
@@ -195,6 +215,7 @@ h2 {
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.3s;
+    box-sizing: border-box;
 }
 
 .button:hover {
@@ -257,6 +278,14 @@ h2 {
     background-color: #f0f8ff;
     font-weight: normal;
 }
+
+.upload-form .button {
+    width: 100%;
+}
+
+.upload-input {
+    width: auto;
+    max-width: 100%;
 
 /* Responsive Design */
 @media (max-width: 768px) {
@@ -332,3 +361,4 @@ h2 {
         margin-bottom: 10px;
     }
 }
+

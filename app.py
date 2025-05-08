@@ -131,7 +131,10 @@ def index():
     if not is_authenticated():
         return redirect(url_for('login'))
     is_anonymous = session.get('user', {}).get('role') == 'anonymous'
-    return render_template('index.html', version=get_version_info(), is_anonymous=is_anonymous)
+    return render_template('index.html', 
+                           version=get_version_info(), 
+                           is_anonymous=is_anonymous,
+                           is_admin=is_admin)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
