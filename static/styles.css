@@ -139,7 +139,7 @@ h2 {
 }
 
 .attendance-wrapper {
-    width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem); /* Dynamic width: 9 chars per sub-district + 6-char buffer */
+    width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 7.125rem); /* Dynamic width: 9 chars per sub-district + 6-char buffer */
     max-height: 70vh;
     flex: none;
     overflow-x: auto; /* Enable horizontal scrollbar */
@@ -147,8 +147,8 @@ h2 {
 }
 
 .attendance-wrapper .excel-table {
-    width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem); /* Match wrapper */
-    min-width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 5.25rem); /* Prevent shrinkage */
+    width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 6.125rem); /* Match wrapper */
+    min-width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 6.125rem); /* Prevent shrinkage */
 }
 
 .attendance-wrapper .excel-table th:nth-child(odd),
@@ -310,10 +310,12 @@ h2 {
         width: 100%; /* Allow full width */
         overflow-x: auto; /* Ensure scrollbar */
     }
-
+    .attendance-wrapper {
+        width: calc(var(--num-sub-districts, 3) * 6 * 0.75rem + 5.25rem);
+    }
     .attendance-wrapper .excel-table {
-        width: calc(var(--num-sub-districts, 3) * 9 * 0.75rem + 4.5rem); /* Dynamic width at 12px font + 6-char buffer */
-        min-width: calc(var(--num-sub-districts, 3) * 9 * 0.75rem + 4.5rem);
+        width: calc(var(--num-sub-districts, 3) * 6 * 0.75rem + 5.25rem); /* Dynamic width at 12px font + 6-char buffer */
+        min-width: calc(var(--num-sub-districts, 3) * 6 * 0.75rem + 5.25rem);
     }
 
     .stats-wrapper .excel-table {
@@ -328,15 +330,11 @@ h2 {
     }
 
     .attendance-wrapper .excel-table th:nth-child(odd),
-    .attendance-wrapper .excel-table td:nth-child(odd) {
-        width: 3.75rem; /* 5 characters at 12px */
-        min-width: 3.75rem;
-    }
-
+    .attendance-wrapper .excel-table td:nth-child(odd), 
     .attendance-wrapper .excel-table th:nth-child(even),
     .attendance-wrapper .excel-table td:nth-child(even) {
-        width: 3rem; /* 4 characters at 12px */
-        min-width: 3rem;
+        width: 2.25rem; /* 4 characters at 12px */
+        min-width: 2.25rem;
     }
 
     .stats-wrapper .excel-table th:first-child,
