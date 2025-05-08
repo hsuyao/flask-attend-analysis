@@ -8,6 +8,7 @@ from pymongo import UpdateOne
 import csv, re, os, math
 
 from config import db, COLLECTION_NAME
+from user import update_user_role, block_user, unblock_user, delete_user
 from utils import parse_week_display   # 若後續用不到可移除
 
 # --- helper: avoid circular import ---
@@ -31,6 +32,77 @@ def admin_home():
                            version=current_app.config.get("VERSION", "dev"),
                            districts=districts,
                            events=events)
+
+# ------------------------------------------------------------------------------
+#  使用者管理主頁面
+# ------------------------------------------------------------------------------
+@admin_bp.route("/users")
+def admin_users():
+    if not is_admin():
+        return "Forbidden", 403
+    return render_template("admin_users.html", version=current_app.config.get("VERSION", "dev"))
+
+# ------------------------------------------------------------------------------
+#  使用者列表 (AJAX)
+# ------------------------------------------------------------------------------
+@admin_bp.route("/users/data")
+def admin_users_data():
+    if not is_admin():
+        return jsonify({"error": "forbidden"}), 403
+
+    users = list(db["users"].find({}, {"password":0}))
+    # serialize
+    data = []
+    for u in users:
+        data.append({
+            "username": u["username"],
+            "email": u.get("email",""),
+            "role": u.get("role",""),
+            "blocked": u.get("blocked", False)
+        })
+    return jsonify(data)
+
+# ------------------------------------------------------------------------------
+#  更新使用者角色
+# ------------------------------------------------------------------------------
+@admin_bp.route("/users/update_role", methods=["POST"])
+def admin_update_role():
+    if not is_admin():
+        return jsonify({"error":"forbidden"}), 403
+    username = request.json.get("username")
+    new_role = request.json.get("role")
+    ok = update_user_role(username, new_role)
+    return jsonify({"success": ok})
+
+# ------------------------------------------------------------------------------
+#  封鎖 / 解封
+# ------------------------------------------------------------------------------
+@admin_bp.route("/users/block", methods=["POST"])
+def admin_block():
+    if not is_admin():
+        return jsonify({"error":"forbidden"}), 403
+    username = request.json.get("username")
+    ok = block_user(username)
+    return jsonify({"success": ok})
+
+@admin_bp.route("/users/unblock", methods=["POST"])
+def admin_unblock():
+    if not is_admin():
+        return jsonify({"error":"forbidden"}), 403
+    username = request.json.get("username")
+    ok = unblock_user(username)
+    return jsonify({"success": ok})
+
+# ------------------------------------------------------------------------------
+#  刪除使用者
+# ------------------------------------------------------------------------------
+@admin_bp.route("/users/delete", methods=["POST"])
+def admin_delete_user():
+    if not is_admin():
+        return jsonify({"error":"forbidden"}), 403
+    username = request.json.get("username")
+    ok = delete_user(username)
+    return jsonify({"success": ok})
 
 # ------------------------------------------------------------------------------
 # REST - data list  (pagination + multi-filter)

@@ -23,6 +23,8 @@
     <a class="button" href="/admin/export">匯出 CSV</a>
     <button class="button btn-danger" id="delSelBtn" onclick="deleteSelected()" disabled>刪除選取</button>
     <a class="button" href="{{ url_for('index') }}">返回首頁</a>
+    <!-- 新增：使用者管理 -->
+    <a class="button" href="{{ url_for('admin_bp.admin_users') }}">使用者管理</a>
   </div>
   <!-- db status -->
   <div id="dbStatus" class="alert alert-info py-2 px-3" role="alert">

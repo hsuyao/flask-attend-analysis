@@ -34,7 +34,8 @@ def create_user(username, email, password):
         "username": username,
         "email": email,
         "password": hashed_password,
-        "role": "user"  # Default role
+        "role": "user",  # Default role
+        "blocked": False
     }
     try:
         collection.insert_one(user)
@@ -46,6 +47,36 @@ def create_user(username, email, password):
     except Exception as e:
         logger.error(f"Failed to create user {username}: {str(e)}")
         return False
+
+
+def update_user_role(username, new_role):
+    """Change a user's role (e.g. user → admin)."""
+    result = db["users"].update_one(
+        {"username": username},
+        {"$set": {"role": new_role}}
+    )
+    return result.modified_count == 1
+
+def block_user(username):
+    """Mark a user as blocked (cannot log in)."""
+    result = db["users"].update_one(
+        {"username": username},
+        {"$set": {"blocked": True}}
+    )
+    return result.modified_count == 1
+
+def unblock_user(username):
+    """Unblock a previously blocked user."""
+    result = db["users"].update_one(
+        {"username": username},
+        {"$set": {"blocked": False}}
+    )
+    return result.modified_count == 1
+
+def delete_user(username):
+    """Permanently delete a user account."""
+    result = db["users"].delete_one({"username": username})
+    return result.deleted_count == 1
 
 def verify_user(username, password):
     """Verify user credentials and return user data if valid."""
