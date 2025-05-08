@@ -97,6 +97,23 @@ def admin_delete(doc_id):
         current_app.logger.error(f"Delete failed: {e}")
         return jsonify({"error": str(e)}), 500
 
+@admin_bp.route("/delete_batch", methods=["POST"])
+def admin_delete_batch():
+    if not is_admin():
+        return jsonify({"error": "forbidden"}), 403
+
+    ids = request.json.get("ids", [])
+    if not ids:
+        return jsonify({"error": "no ids"}), 400
+
+    try:
+        obj_ids = [ObjectId(i) for i in ids]
+        res = db[COLLECTION_NAME].delete_many({"_id": {"$in": obj_ids}})
+        return jsonify({"deleted": res.deleted_count})
+    except Exception as e:
+        current_app.logger.error(f"Batch delete failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
 # ------------------------------------------------------------------------------
 # Export CSV
 # ------------------------------------------------------------------------------

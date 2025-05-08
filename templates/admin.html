@@ -16,11 +16,12 @@
 <div class="container">
   <h2>資料庫管理 (Admin)</h2>
 
-  <!-- Import / Export -->
+  <!-- Import / Export / Delete Selected -->
   <div class="mb-3">
     <input id="importFile" type="file" accept=".csv">
     <button class="button" onclick="importCSV()">匯入</button>
     <a class="button" href="/admin/export">匯出 CSV</a>
+    <button class="button btn-danger" id="delSelBtn" onclick="deleteSelected()" disabled>刪除選取</button>
   </div>
 
   <!-- Filters -->
@@ -50,6 +51,7 @@
     <table class="excel-table" id="dataTable">
       <thead>
         <tr>
+          <th><input type="checkbox" id="selectAll"></th>
           <th data-field="name">姓名</th>
           <th data-field="district">區</th>
           <th data-field="week_display">週次</th>
@@ -73,9 +75,7 @@ let currentPage=1, perPage=20, sort="week_display", order=-1;
 
 function filters(){
   return {
-    page: currentPage,
-    per_page: perPage,
-    sort, order,
+    page: currentPage, per_page: perPage, sort, order,
     name: $('#nameKw').val(),
     start: $('#startDt').val(),
     end: $('#endDt').val(),
@@ -88,12 +88,16 @@ function loadPage(p=1){
   currentPage=p;
   $.getJSON('/admin/data', filters(), renderTable)
        .fail(e=>alert('載入失敗: '+e.responseJSON?.error));
+  // 清掉全選與刪除按鈕狀態
+  $('#selectAll').prop('checked', false);
+  toggleDeleteBtn();
 }
 
 function renderTable(res){
   const tb=$('#dataTable tbody').empty();
   res.records.forEach(r=>{
     tb.append(`<tr>
+      <td><input type="checkbox" class="row-chk" value="${r.id}"></td>
       <td>${r.name}</td><td>${r.district}</td><td>${r.week_display}</td>
       <td>${r.event_name}</td><td>${r.attended}</td><td>${r.date}</td>
       <td><button class="btn btn-sm btn-danger" onclick="del('${r.id}')">刪除</button></td>
@@ -107,6 +111,9 @@ function renderTable(res){
     pg.append(`<li class="page-item ${i===currentPage?'active':''}">
        <a class="page-link" href="javascript:loadPage(${i})">${i}</a></li>`);
   }
+
+  // 綁定勾選事件
+  $('.row-chk').on('change', toggleDeleteBtn);
 }
 
 function del(id){
@@ -116,6 +123,29 @@ function del(id){
      .fail(e=>alert('刪除失敗:'+e.responseJSON?.error));
 }
 
+// ------------ 批次刪除 ------------
+function deleteSelected(){
+  const ids=$('.row-chk:checked').map((_,el)=>el.value).get();
+  if(ids.length===0) return;
+  if(!confirm('確定刪除 '+ids.length+' 筆?')) return;
+  $.ajax({url:'/admin/delete_batch',type:'POST',
+          contentType:'application/json',
+          data:JSON.stringify({ids})})
+    .done(r=>{alert('已刪除 '+r.deleted+' 筆');loadPage(currentPage);})
+    .fail(e=>alert('批次刪除失敗:'+e.responseJSON?.error));
+}
+// 全選
+$('#selectAll').on('change',function(){
+  $('.row-chk').prop('checked', this.checked);
+  toggleDeleteBtn();
+});
+// 切換「刪除選取」按鈕狀態
+function toggleDeleteBtn(){
+  const any=$('.row-chk:checked').length>0;
+  $('#delSelBtn').prop('disabled', !any);
+}
+
+// ------------ CSV Import / Sort ------------
 function importCSV(){
   const f=$('#importFile')[0].files[0];
   if(!f){alert('請選檔');return;}
@@ -126,7 +156,7 @@ function importCSV(){
     .fail(e=>alert('匯入失敗:'+e.responseJSON?.error));
 }
 
-// sort header click
+// sort header
 $('#dataTable th[data-field]').on('click',function(){
   const f=$(this).data('field');
   if(sort===f){order*=-1;}else{sort=f;order=-1;}
