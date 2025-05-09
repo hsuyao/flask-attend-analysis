@@ -339,7 +339,7 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
     for d in districts:
         html += f'<th colspan="2">{d}</th>'
     html += '</tr>\n<tr class="subheader">\n'
-    html += ''.join('<th>Name</th><th>Rate</th>' for _ in districts)
+    html += ''.join('<th>姓名</th><th>到會率</th>' for _ in districts)
     html += '</tr>\n'
 
     for r in range(max_len):
