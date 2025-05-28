@@ -306,18 +306,31 @@ def result():
         is_history_page=True,
         event_totals=event_totals
     )
-
-    week_options = [(week_name, idx) for idx, (_, _, week_name, _) in enumerate(sorted_attendance_data)]
+    week_options = [(week_name, week_name) for (_, _, week_name, _) in sorted_attendance_data]
     logger.info(f"Generated week_options: {week_options}")
     return render_template(
         'result.html',
         attendance_table_html=attendance_table_html,
         has_file_stream=True,
         week_options=week_options,
-        selected_week_idx=sunday_idx,
+        selected_week_display=sunday_week_display,   # 新增
         version=get_version_info(),
         is_anonymous=is_anonymous
-    )
+)
+
+@app.route('/get_week_data_by_name/<path:week_display>')
+def get_week_data_by_name(week_display):
+    if not is_authenticated():
+        return jsonify({"error":"請先登入"}), 401
+
+    all_data = session.get('all_attendance_data', [])
+    # 先依週次字串找出索引
+    sorted_data = sorted(all_data, key=lambda x: parse_week_display(x[2]), reverse=True)
+    for idx, item in enumerate(sorted_data):
+        if item[2] == week_display:
+            # 直接呼叫既有函式重用邏輯
+            return get_week_data(idx)
+    return jsonify({"error":"週次不存在"}), 404
 
 @app.route('/get_week_data/<int:week_idx>')
 def get_week_data(week_idx):

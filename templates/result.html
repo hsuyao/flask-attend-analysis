@@ -13,13 +13,14 @@
         <h2>統計結果</h2>
         <div class="table-container">
             <div class="week-selector-container">
-              <select id="weekSelector" class="week-selector">
-                  {% for week_name, idx in week_options|reverse %}
-                      <option value="{{ idx }}" {% if loop.first %}selected{% endif %}>
-                          {{ week_name }}
-                      </option>
-                  {% endfor %}
-              </select>
+				<select id="weekSelector" class="week-selector">
+				{% for week_name, value in week_options %}
+					<option value="{{ value }}"
+							{% if week_name == selected_week_display %}selected{% endif %}>
+						{{ week_name }}
+					</option>
+				{% endfor %}
+			</select>
             </div>
             <div id="attendanceTable">
                 {{ attendance_table_html | safe }}
@@ -42,36 +43,16 @@
 
     <script>
         function updateTable() {
-            var weekIdx = document.getElementById('weekSelector').value;
-            $.ajax({
-                url: '/get_week_data/' + weekIdx,
-                type: 'GET',
-                success: function(response) {
-                    if (response.attendance_table) {
-                        $('#attendanceTable').html(response.attendance_table);
-                        console.log('統計表格更新成功');
-                    } else {
-                        console.error('回應中無 attendance_table:', response);
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('AJAX 錯誤:', status, error);
-                }
-            });
-        }
+			const weekStr = $('#weekSelector').val();           // ← 用字串
+			$.ajax({
+				url: '/get_week_data_by_name/' + encodeURIComponent(weekStr),
+				type: 'GET',
+				success: res => $('#attendanceTable').html(res.attendance_table || '<p>無資料</p>'),
+				error: () => $('#attendanceTable').html('<p>載入失敗</p>')
+			});
+		}
 
-        $(document).ready(function() {
-            $('#weekSelector').on('change', updateTable);
-            const taskResult = sessionStorage.getItem('taskResult');
-            if (taskResult) {
-                const result = JSON.parse(taskResult);
-                {% for key in ['latest_analytic_date', 'latest_attendance_data', 'latest_week_display', 'latest_district_counts', 'latest_main_district', 'latest_main_district_counts', 'all_attendance_data'] %}
-                    sessionStorage.setItem('{{ key }}', JSON.stringify(result['{{ key }}']));
-                {% endfor %}
-                sessionStorage.removeItem('taskResult');
-                updateTable();
-            }
-        });
+        $(document).ready(()=>$('#weekSelector').on('change', updateTable));
     </script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9354ac36be1844f9',t:'MTc0NTQ4Nzk3OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
