@@ -1,29 +1,51 @@
 import os
 import logging
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 
-# Configure logging
+# ──────────────────────────────────────────────────────────────
+#  logging & env
+# ──────────────────────────────────────────────────────────────
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# Environment variables
-DB_TYPE = os.getenv("DB_TYPE", "mongodb")  # Default to mongodb
+DB_TYPE = os.getenv("DB_TYPE", "mongodb")
 MONGO_URI = os.getenv("MONGO_URI")
 COLLECTION_NAME = "attendance_records"
 START_COLUMN = 7
 
-# Initialize database connection
-if DB_TYPE == "mongodb":
-    if not MONGO_URI:
-        logger.error("MONGO_URI is required for MongoDB")
-        raise ValueError("MONGO_URI is not set")
+# ──────────────────────────────────────────────────────────────
+#  Offline stub
+# ──────────────────────────────────────────────────────────────
+class _OfflineCollection:
+    def __init__(self, name): self.name = name
+    def __getattr__(self, _):
+        def _stub(*a, **kw):
+            raise RuntimeError("資料庫離線，無法存取")
+        return _stub
+
+class _OfflineDB:
+    def __getitem__(self, name): return _OfflineCollection(name)
+    def command(self, *a, **kw): raise RuntimeError("資料庫離線")
+
+# ──────────────────────────────────────────────────────────────
+#  Connect helper
+# ──────────────────────────────────────────────────────────────
+def _connect_mongo(uri: str):
+    if not uri:
+        raise ValueError("MONGO_URI 未設定")
     try:
-        client = MongoClient(MONGO_URI)
-        db = client["attendance_db"]
-        logger.info("Successfully connected to MongoDB Atlas")
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {str(e)}")
-        raise
-else:
-    logger.error(f"Invalid DB_TYPE: {DB_TYPE}")
+        client = MongoClient(uri, serverSelectionTimeoutMS=3000, connect=True)
+        client.admin.command("ping")          # 強制 I/O
+        logger.info("✅  MongoDB connected")
+        return client["attendance_db"], False  # False = 非離線
+    except (errors.PyMongoError, Exception) as e:
+        logger.warning(f"⚠️  MongoDB unreachable: {e}")
+        return _OfflineDB(), True             # True  = 離線
+
+# ──────────────────────────────────────────────────────────────
+#  Export objects
+# ──────────────────────────────────────────────────────────────
+if DB_TYPE != "mongodb":
     raise ValueError(f"Unsupported DB_TYPE: {DB_TYPE}")
+
+db, DB_OFFLINE = _connect_mongo(MONGO_URI)

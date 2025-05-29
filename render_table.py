@@ -1,4 +1,4 @@
-from config import logger, db, COLLECTION_NAME
+from config import logger, db, DB_OFFLINE, COLLECTION_NAME
 from utils import chinese_to_int, parse_district, parse_week_display
 from database import get_six_month_averages, get_all_latest_attendance_dates, get_six_month_trimmed_mean_by_event
 from datetime import datetime
@@ -121,7 +121,16 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
                 combined_list.extend((name, False, False) for name in not_attended_list)
 
             names = [name for name, _, _ in combined_list]
-            latest_dates = get_all_latest_attendance_dates(names, placeholder_date)
+
+            # ───────────────────────────────────────────────
+            # 離線模式：避免觸發 MongoDB，直接給空字串
+            # ───────────────────────────────────────────────
+            if DB_OFFLINE:
+                latest_dates = {n: '' for n in names}
+            else:
+                latest_dates = get_all_latest_attendance_dates(
+                    names, placeholder_date
+                )
             logger.debug(f"District {district}: Attendance rates {[(name, avg_attendance_rates.get(name, 0.0)) for name in names]}")
             logger.debug(f"District {district}: Highlights {[(name, has_highlight) for name, _, has_highlight in combined_list]}")
             # Sort by highlight status (True first), then attendance rate (descending), then latest date (parsed)

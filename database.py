@@ -129,7 +129,21 @@ def get_week_attendance_count(week_display, district, event_name):
         return 0
 
 def get_all_latest_attendance_dates(names=None, placeholder_date=None):
-    # Get latest week_display for each name, optionally filtered by names and date
+    """Return latest week_display for every name, or list of all week_displays.
+       - 連線正常 → 查 Mongo
+       - 離線模式 → 回預設空結果，不觸發 DB
+    """
+    # ---------- 離線早退 ----------
+    if DB_OFFLINE:
+        if names:
+            # dict: {name: None}
+            if isinstance(names, set):
+                names = list(names)
+            return {n: None for n in names}
+        # names is None → 回空 list
+        return []
+
+    # ---------- 正常連線 ----------
     try:
         pipeline = []
         if names:

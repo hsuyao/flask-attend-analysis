@@ -1,9 +1,15 @@
-from config import db, logger
+from config import db, DB_OFFLINE, COLLECTION_NAME
 from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo.errors import DuplicateKeyError
+import logging
+logger = logging.getLogger(__name__)
 
 def init_users_collection():
     """Initialize the users collection with a unique index on username if it doesn't exist."""
+    if DB_OFFLINE:
+        logger.warning("離線模式：跳過 users collection 初始化")
+        return
+
     collection = db["users"]
     index_name = "username_idx"
     
@@ -28,7 +34,12 @@ def init_users_collection():
 
 def create_user(username, email, password):
     """Create a new user with hashed password."""
+    if DB_OFFLINE:
+        logger.warning("離線模式：停用 create_user")
+        return False
+
     collection = db["users"]
+
     hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
     user = {
         "username": username,
@@ -51,6 +62,8 @@ def create_user(username, email, password):
 
 def update_user_role(username, new_role):
     """Change a user's role (e.g. user → admin)."""
+    if DB_OFFLINE:
+        return False
     result = db["users"].update_one(
         {"username": username},
         {"$set": {"role": new_role}}
@@ -59,6 +72,8 @@ def update_user_role(username, new_role):
 
 def block_user(username):
     """Mark a user as blocked (cannot log in)."""
+    if DB_OFFLINE:
+        return False
     result = db["users"].update_one(
         {"username": username},
         {"$set": {"blocked": True}}
@@ -67,6 +82,8 @@ def block_user(username):
 
 def unblock_user(username):
     """Unblock a previously blocked user."""
+    if DB_OFFLINE:
+        return False
     result = db["users"].update_one(
         {"username": username},
         {"$set": {"blocked": False}}
@@ -75,11 +92,19 @@ def unblock_user(username):
 
 def delete_user(username):
     """Permanently delete a user account."""
+    if DB_OFFLINE:
+        return False
     result = db["users"].delete_one({"username": username})
     return result.deleted_count == 1
 
 def verify_user(username, password):
     """Verify user credentials and return user data if valid."""
+    collection = db["users"]
+    user = collection.find_one({"username": username})
+    if DB_OFFLINE:
+        logger.warning("離線模式：verify_user 自動失敗")
+        return None
+
     collection = db["users"]
     user = collection.find_one({"username": username})
     if user and check_password_hash(user["password"], password):
@@ -90,6 +115,10 @@ def verify_user(username, password):
 
 def create_admin_if_not_exists(admin_username, admin_password):
     """Create admin user from environment variables if it doesn't exist."""
+    if DB_OFFLINE:
+        logger.warning("離線模式：跳過 create_admin_if_not_exists")
+        return
+
     collection = db["users"]
     if not collection.find_one({"username": admin_username}):
         hashed_password = generate_password_hash(admin_password, method='pbkdf2:sha256')

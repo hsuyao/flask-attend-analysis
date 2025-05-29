@@ -7,7 +7,7 @@ from bson import ObjectId
 from pymongo import UpdateOne
 import csv, re, os, math
 
-from config import db, COLLECTION_NAME
+from config import db, DB_OFFLINE, COLLECTION_NAME
 from user import update_user_role, block_user, unblock_user, delete_user
 from utils import parse_week_display   # 若後續用不到可移除
 
@@ -23,6 +23,8 @@ admin_bp = Blueprint("admin_bp", __name__, url_prefix="/admin")
 # ------------------------------------------------------------------------------
 @admin_bp.route("/")
 def admin_home():
+    if DB_OFFLINE:
+        return "Database offline", 503
     if not is_admin():
         return "Forbidden", 403
     # distinct values for dropdowns
@@ -38,6 +40,8 @@ def admin_home():
 # ------------------------------------------------------------------------------
 @admin_bp.route("/users")
 def admin_users():
+    if DB_OFFLINE:
+        return "Database offline", 503
     if not is_admin():
         return "Forbidden", 403
     return render_template("admin_users.html", version=current_app.config.get("VERSION", "dev"))
@@ -47,6 +51,8 @@ def admin_users():
 # ------------------------------------------------------------------------------
 @admin_bp.route("/users/data")
 def admin_users_data():
+    if DB_OFFLINE:
+        return jsonify({"error": "db offline"}), 503
     if not is_admin():
         return jsonify({"error": "forbidden"}), 403
 

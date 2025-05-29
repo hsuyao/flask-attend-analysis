@@ -8,7 +8,7 @@ from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table, render_average_attendance_table
 from database import init_database, get_six_month_averages, get_event_name, get_event_totals, get_six_month_trimmed_mean, get_six_month_trimmed_mean_by_event
 from user import init_users_collection, create_user, verify_user, create_admin_if_not_exists
-from config import db, COLLECTION_NAME
+from config import db, DB_OFFLINE, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
 import logging
@@ -18,6 +18,7 @@ app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 Session(app)
+app.config['DB_OFFLINE'] = DB_OFFLINE          # 供 template 使用
 app.register_blueprint(admin_bp)
 
 # Configure logging
@@ -27,23 +28,23 @@ logger = logging.getLogger(__name__)
 # Log application startup
 logger.info("Starting Flask application")
 
-# Initialize database and users collection
-try:
-    init_database()
-    init_users_collection()
-    db.command("ping")  # Test MongoDB connection
-    logger.info("Successfully connected to MongoDB")
-    
-    # Create admin user from environment variables
-    admin_username = os.getenv('ADMIN_ACCOUNT')
-    admin_password = os.getenv('ADMIN_PASSWORD')
-    if not admin_username or not admin_password:
-        logger.error("ADMIN_ACCOUNT and ADMIN_PASSWORD environment variables are required")
-        raise ValueError("Admin credentials not set")
-    create_admin_if_not_exists(admin_username, admin_password)
-except Exception as e:
-    logger.error(f"Failed to initialize database or admin user: {str(e)}")
-    raise
+# ---------------- 初始化 ----------------
+if not DB_OFFLINE:
+    try:
+        init_database()
+        init_users_collection()
+        db.command("ping")
+        admin_username = os.getenv('ADMIN_ACCOUNT')
+        admin_password = os.getenv('ADMIN_PASSWORD')
+        if not (admin_username and admin_password):
+            raise ValueError("Admin credentials not set")
+        create_admin_if_not_exists(admin_username, admin_password)
+        logger.info("資料庫初始化完成")
+    except Exception as e:
+        logger.error(f"DB init error: {e}")
+        raise
+else:
+    logger.warning("⚠️  離線模式：跳過資料庫 / 使用者初始化")
 
 # Thread pool for background tasks
 executor = ThreadPoolExecutor(max_workers=2)
@@ -138,6 +139,22 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # 離線模式：只能匿名
+    if DB_OFFLINE:
+        if request.method == 'POST':
+            # POST 直接回覆錯誤訊息
+            return render_template(
+                'login.html',
+                error="資料庫離線，暫時僅支援匿名登入",
+                version=get_version_info()
+            )
+        # GET 顯示同樣提示
+        return render_template(
+            'login.html',
+            error="資料庫離線，請點選『匿名登入』",
+            version=get_version_info()
+        )
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -163,6 +180,14 @@ def anonymous_login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    # 離線模式停用註冊
+    if DB_OFFLINE:
+        return render_template(
+            'register.html',
+            error="資料庫離線，無法註冊新帳號",
+            version=get_version_info()
+        )
+
     if request.method == 'POST':
         username = request.form.get('username')
         email = request.form.get('email')
@@ -204,7 +229,13 @@ def upload_file():
     task_id = str(uuid.uuid4())
     try:
         tasks[task_id] = {'state': 'PENDING', 'stage': 'Waiting', 'progress': 0}
-        executor.submit(process_excel_task, files, file_extensions, task_id, save_to_db=not is_anonymous)
+        executor.submit(
+            process_excel_task,
+            files,
+            file_extensions,
+            task_id,
+            save_to_db=(not is_anonymous and not DB_OFFLINE)
+        )
         logger.info(f"Started background task: {task_id}")
         return jsonify({"task_id": task_id}), 202
     except Exception as e:
@@ -439,6 +470,10 @@ def history():
     if not is_authenticated():
         return redirect(url_for('login'))
     
+    if DB_OFFLINE:
+        return render_template('index.html',
+                               error="資料庫離線，無法查看歷史紀錄",
+                               version=get_version_info(), is_anonymous=True)
     is_anonymous = session.get('user', {}).get('role') == 'anonymous'
     if is_anonymous:
         return render_template('index.html', error="匿名使用者無法查看歷史紀錄", version=get_version_info(), is_anonymous=True)
@@ -469,6 +504,10 @@ def average_attendance():
     if not is_authenticated():
         return redirect(url_for('login'))
     
+    if DB_OFFLINE:
+        return render_template('index.html',
+                               error="資料庫離線，無法查看半年平均出席",
+                               version=get_version_info(), is_anonymous=True)
     is_anonymous = session.get('user', {}).get('role') == 'anonymous'
     if is_anonymous:
         return render_template('index.html', error="匿名使用者無法查看半年平均出席", version=get_version_info(), is_anonymous=True)
