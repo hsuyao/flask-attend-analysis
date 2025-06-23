@@ -11,6 +11,7 @@ from user import init_users_collection, create_user, verify_user, create_admin_i
 from config import db, DB_OFFLINE, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
+from urllib.parse import urlencode
 import logging
 from admin_routes import admin_bp
 
@@ -269,7 +270,12 @@ def task_result(task_id):
         session['event_name'] = result.get('event_name')
         session['week_avg_rates'] = result.get('week_avg_rates', {})
         logger.info(f"Session updated with task result, {result.get('records_written', 0)} records written")
-        return jsonify({"status": "success", "redirect": url_for('result')})
+        query = urlencode({
+            'district': result.get('latest_main_district', ''),
+            'week': result.get('latest_week_display', '')
+        })
+        redirect_url = url_for('history') + ('?' + query if query else '')
+        return jsonify({"status": "success", "redirect": redirect_url})
     elif task['state'] == 'FAILURE':
         logger.error(f"Task {task_id} failed: {task['error']}")
         return jsonify({"status": "error", "error": task['error']}), 500
