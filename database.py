@@ -1,4 +1,4 @@
-from config import db, COLLECTION_NAME
+from config import db, DB_OFFLINE, COLLECTION_NAME
 import logging
 from pymongo.errors import DuplicateKeyError
 from pymongo import UpdateOne
