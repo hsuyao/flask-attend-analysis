@@ -337,7 +337,9 @@ def result():
         is_history_page=True,
         event_totals=event_totals
     )
-    week_options = [(week_name, week_name) for (_, _, week_name, _) in sorted_attendance_data]
+    week_options = [
+        (idx, week_name) for idx, (_, _, week_name, _) in enumerate(sorted_attendance_data)
+    ]
     logger.info(f"Generated week_options: {week_options}")
     return render_template(
         'result.html',
