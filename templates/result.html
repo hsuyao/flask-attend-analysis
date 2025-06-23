@@ -13,14 +13,14 @@
         <h2>統計結果</h2>
         <div class="table-container">
             <div class="week-selector-container">
-				<select id="weekSelector" class="week-selector">
-				{% for week_name, value in week_options %}
-					<option value="{{ value }}"
-							{% if week_name == selected_week_display %}selected{% endif %}>
-						{{ week_name }}
-					</option>
-				{% endfor %}
-			</select>
+                             <select id="weekSelector" class="week-selector">
+                             {% for idx, week_name in week_options %}
+                                     <option value="{{ idx }}"
+                                                     {% if week_name == selected_week_display %}selected{% endif %}>
+                                             {{ week_name }}
+                                     </option>
+                             {% endfor %}
+                     </select>
             </div>
             <div id="attendanceTable">
                 {{ attendance_table_html | safe }}
@@ -43,14 +43,14 @@
 
     <script>
         function updateTable() {
-			const weekStr = $('#weekSelector').val();           // ← 用字串
-			$.ajax({
-				url: '/get_week_data_by_name/' + encodeURIComponent(weekStr),
-				type: 'GET',
-				success: res => $('#attendanceTable').html(res.attendance_table || '<p>無資料</p>'),
-				error: () => $('#attendanceTable').html('<p>載入失敗</p>')
-			});
-		}
+                     const weekIdx = $('#weekSelector').val();
+                     $.ajax({
+                             url: '/get_week_data/' + weekIdx,
+                             type: 'GET',
+                             success: res => $('#attendanceTable').html(res.attendance_table || '<p>無資料</p>'),
+                             error: () => $('#attendanceTable').html('<p>載入失敗</p>')
+                     });
+             }
 
         $(document).ready(()=>$('#weekSelector').on('change', updateTable));
     </script>
