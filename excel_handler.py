@@ -302,19 +302,19 @@ def process_excel(file_stream, file_extension, save_to_db=True):
                 
                 for record in district_records:
                     key = (record["name"], week_display, evt_name)
-                    if db_attendance_count == 0 or key not in existing_cache:
-                        # Overwrite if no attendance in DB or record doesn't exist
-                        operations.append(UpdateOne(
-                            {
-                                "name": record["name"],
-                                "week_display": week_display,
-                                "event_name": evt_name
-                            },
-                            {"$set": record},
-                            upsert=True
-                        ))
-                        logger.debug(f"Added UpdateOne for {record['name']} in {week_display}, {district} "
-                                    f"(DB attendance: {db_attendance_count}, exists: {key in existing_cache})")
+                    operations.append(UpdateOne(
+                        {
+                            "name": record["name"],
+                            "week_display": week_display,
+                            "event_name": evt_name
+                        },
+                        {"$set": record},
+                        upsert=True
+                    ))
+                    logger.debug(
+                        f"Added UpdateOne for {record['name']} in {week_display}, {district} "
+                        f"(exists: {key in existing_cache})"
+                    )
 
         logger.info(f"Prepared {len(operations)} bulk operations")
         if operations:
