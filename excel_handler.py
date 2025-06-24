@@ -63,18 +63,18 @@ def classify_attendance(sheet, week_col, week_display, placeholder_date, event_n
 
     # First pass: collect all records and classify attendance
     temp_records = []
-    for row in range(3, max_row + 1):
-        main_district_value = str(sheet.cell(row, 1).value or "").strip()
-        sub_district = str(sheet.cell(row, 2).value or "").strip()
+    for row_values in sheet.iter_rows(min_row=3, max_row=max_row, values_only=True):
+        main_district_value = str(row_values[0] or "").strip()
+        sub_district = str(row_values[1] or "").strip()
         district = f"{main_district_value}{sub_district}"
-        name = sheet.cell(row, 4).value
-        age = str(sheet.cell(row, 6).value or "").strip()
+        name = row_values[3]
+        age = str(row_values[5] or "").strip()
         if not name or not district.startswith(main_district_value):
             continue
         if main_district is None and main_district_value:
             main_district = main_district_value
 
-        attendance = sheet.cell(row, week_col + 1).value
+        attendance = row_values[week_col]
         effective_age = '青職以上' if age in youth_above or not age else age
         if effective_age not in age_categories:
             effective_age = '青職以上'
@@ -195,7 +195,7 @@ def process_excel(file_stream, file_extension, save_to_db=True):
         file_extension = '.xlsx'
 
     try:
-        workbook = openpyxl.load_workbook(buffered_stream)
+        workbook = openpyxl.load_workbook(buffered_stream, data_only=True, read_only=True)
     except Exception as e:
         logger.error(f"Failed to load workbook: {str(e)}")
         raise
