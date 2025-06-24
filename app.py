@@ -5,7 +5,11 @@ import uuid
 import os
 from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel, generate_excel
-from render_table import render_attendance_table, render_average_attendance_table
+from render_table import (
+    render_attendance_table,
+    render_average_attendance_table,
+    render_year_average_attendance_table,
+)
 from database import (
     init_database,
     get_six_month_averages,
@@ -14,6 +18,8 @@ from database import (
     get_six_month_trimmed_mean,
     get_six_month_trimmed_mean_by_event,
     get_six_month_trimmed_mean_by_age_group,
+    get_year_trimmed_mean_by_event,
+    get_year_trimmed_mean_by_age_group,
 )
 from user import init_users_collection, create_user, verify_user, create_admin_if_not_exists
 from config import db, DB_OFFLINE, COLLECTION_NAME
@@ -549,6 +555,46 @@ def average_attendance():
             is_anonymous=is_anonymous
         )
 
+
+@app.route('/yearly_average_attendance')
+def yearly_average_attendance():
+    if not is_authenticated():
+        return redirect(url_for('login'))
+
+    if DB_OFFLINE:
+        return render_template('index.html',
+                               error="資料庫離線，無法查看全年平均出席",
+                               version=get_version_info(), is_anonymous=True)
+
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if is_anonymous:
+        return render_template('index.html', error="匿名使用者無法查看全年平均出席", version=get_version_info(), is_anonymous=True)
+
+    try:
+        districts = db[COLLECTION_NAME].distinct("district")
+        main_districts = sorted(
+            set(parse_district(d)[0] for d in districts if parse_district(d)[0]),
+            key=lambda x: chinese_to_int(x[0])
+        )
+
+        weeks = db[COLLECTION_NAME].distinct("week_display")
+        years = sorted({parse_week_display(w)[0] for w in weeks if parse_week_display(w)[0]})
+
+        return render_template(
+            'yearly_average_attendance.html',
+            main_districts=main_districts,
+            years=years,
+            version=get_version_info()
+        )
+    except Exception as e:
+        logger.error(f"Failed to load yearly average attendance page: {str(e)}")
+        return render_template(
+            'index.html',
+            error="無法載入全年平均出席頁面",
+            version=get_version_info(),
+            is_anonymous=is_anonymous
+        )
+
 @app.route('/get_weeks_for_district/<district>')
 def get_weeks_for_district(district):
     if not is_authenticated():
@@ -762,6 +808,52 @@ def get_average_attendance_data(district, date):
         return jsonify({"error": "無效的日期格式"}), 400
     except Exception as e:
         logger.error(f"Failed to get average attendance data for {district} on {date}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/get_year_average_attendance_data/<district>/<int:year>')
+def get_year_average_attendance_data(district, year):
+    if not is_authenticated():
+        return jsonify({"error": "請先登入"}), 401
+
+    is_anonymous = session.get('user', {}).get('role') == 'anonymous'
+    if is_anonymous:
+        return jsonify({"error": "匿名使用者無法訪問此資源"}), 403
+
+    try:
+        end_date = datetime(year, 12, 31)
+        now = datetime.now()
+        if end_date > now:
+            end_date = now
+
+        event_names = db[COLLECTION_NAME].distinct("event_name")
+        trimmed_mean_data_list = []
+        for event in event_names:
+            if event == "未指定活動":
+                continue
+            data = get_year_trimmed_mean_by_event(district, end_date, event)
+            if any(data["districts"].values()) or data["counts"].get(district):
+                trimmed_mean_data_list.append(data)
+
+        age_group_data = get_year_trimmed_mean_by_age_group(district, end_date)
+
+        if not trimmed_mean_data_list:
+            logger.warning(f"No yearly average attendance data for {district} in {year}")
+            return jsonify({
+                'attendance_table': '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
+            }), 404
+
+        trimmed_mean_data_list.sort(key=lambda x: x['event_name'])
+        attendance_table_html = render_year_average_attendance_table(
+            district,
+            end_date,
+            trimmed_mean_data_list,
+            age_group_data,
+        )
+        logger.info(f"Rendered yearly average attendance data for {district} in {year}")
+        return jsonify({'attendance_table': attendance_table_html})
+    except Exception as e:
+        logger.error(f"Failed to get yearly average attendance data for {district}, {year}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
