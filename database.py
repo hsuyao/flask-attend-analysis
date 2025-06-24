@@ -491,3 +491,149 @@ def get_six_month_trimmed_mean_by_age_group(main_district, end_date):
             f"Failed to calculate trimmed mean by age for {main_district}: {str(e)}"
         )
         return {age: {} for age in ['青職以上', '大專', '中學', '小學', '學齡前']}
+
+
+def get_year_trimmed_mean(main_district, end_date):
+    """Calculate trimmed mean attendance for '主日' over one year."""
+    return get_year_trimmed_mean_by_event(main_district, end_date, event_name="主日")
+
+
+def get_year_trimmed_mean_by_event(main_district, end_date, event_name):
+    """Calculate trimmed mean attendance per district for a specific event over one year."""
+    try:
+        logger.debug(f"Calculating yearly trimmed mean for {main_district}, event: {event_name}, up to {end_date}")
+        one_year_ago = end_date - timedelta(days=365)
+        year = one_year_ago.year
+        month = one_year_ago.month
+        week_num = (one_year_ago.day - 1) // 7 + 1
+        week_start = f"{year}年{month:02d}月第{week_num}週"
+
+        districts = db[COLLECTION_NAME].distinct("district", {
+            "district": {"$regex": f"^{main_district}"},
+            "event_name": event_name
+        })
+
+        result = {
+            "districts": {},
+            "main_district": main_district,
+            "counts": {},
+            "event_name": event_name
+        }
+
+        for district in districts:
+            pipeline = [
+                {"$match": {
+                    "district": district,
+                    "week_display": {"$gte": week_start},
+                    "event_name": event_name,
+                    "attended": 1
+                }},
+                {"$group": {"_id": "$week_display", "count": {"$sum": 1}}}
+            ]
+            weekly_counts = list(db[COLLECTION_NAME].aggregate(pipeline))
+            counts = [r["count"] for r in weekly_counts]
+            if not counts:
+                result["districts"][district] = 0
+                continue
+
+            counts.sort()
+            n = len(counts)
+            trim = int(n * 0.1)
+            trimmed_counts = counts[trim:n - trim] if n > 2 * trim else counts
+            mean = round(sum(trimmed_counts) / len(trimmed_counts)) if trimmed_counts else 0
+            result["districts"][district] = mean
+
+        pipeline = [
+            {"$match": {
+                "district": {"$regex": f"^{main_district}"},
+                "week_display": {"$gte": week_start},
+                "event_name": event_name,
+                "attended": 1
+            }},
+            {"$group": {"_id": "$week_display", "count": {"$sum": 1}}}
+        ]
+        weekly_counts = list(db[COLLECTION_NAME].aggregate(pipeline))
+        counts = [r["count"] for r in weekly_counts]
+        if counts:
+            counts.sort()
+            n = len(counts)
+            trim = int(n * 0.1)
+            trimmed_counts = counts[trim:n - trim] if n > 2 * trim else counts
+            mean = round(sum(trimmed_counts) / len(trimmed_counts)) if trimmed_counts else 0
+            result["counts"][main_district] = mean
+        else:
+            result["counts"][main_district] = 0
+
+        logger.info(f"Year trimmed mean for {main_district}, event: {event_name}: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to calculate yearly trimmed mean for {main_district}, event: {event_name}: {str(e)}")
+        return {"districts": {}, "main_district": main_district, "counts": {}, "event_name": event_name}
+
+
+def get_year_trimmed_mean_by_age_group(main_district, end_date):
+    """Calculate trimmed mean attendance per age group for the last year."""
+    try:
+        age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
+        one_year_ago = end_date - timedelta(days=365)
+        year = one_year_ago.year
+        month = one_year_ago.month
+        week_num = (one_year_ago.day - 1) // 7 + 1
+        week_start = f"{year}年{month:02d}月第{week_num}週"
+
+        districts = db[COLLECTION_NAME].distinct(
+            "district",
+            {"district": {"$regex": f"^{main_district}"}, "event_name": "主日"}
+        )
+
+        def _trimmed_mean(values):
+            if not values:
+                return 0
+            values.sort()
+            n = len(values)
+            trim = int(n * 0.1)
+            trimmed = values[trim:n - trim] if n > 2 * trim else values
+            return round(sum(trimmed) / len(trimmed)) if trimmed else 0
+
+        result = {age: {} for age in age_categories}
+
+        for district in districts:
+            pipeline = [
+                {"$match": {
+                    "district": district,
+                    "week_display": {"$gte": week_start},
+                    "event_name": "主日",
+                    "attended": 1
+                }},
+                {"$group": {"_id": {"age_group": "$age_group", "week_display": "$week_display"}, "count": {"$sum": 1}}},
+                {"$group": {"_id": "$_id.age_group", "weekly": {"$push": "$count"}}}
+            ]
+            age_results = list(db[COLLECTION_NAME].aggregate(pipeline))
+            for doc in age_results:
+                age = doc["_id"] or '青職以上'
+                if age not in age_categories:
+                    age = '青職以上'
+                result[age][district] = _trimmed_mean(doc.get("weekly", []))
+
+        pipeline = [
+            {"$match": {
+                "district": {"$regex": f"^{main_district}"},
+                "week_display": {"$gte": week_start},
+                "event_name": "主日",
+                "attended": 1
+            }},
+            {"$group": {"_id": {"age_group": "$age_group", "week_display": "$week_display"}, "count": {"$sum": 1}}},
+            {"$group": {"_id": "$_id.age_group", "weekly": {"$push": "$count"}}}
+        ]
+        age_results = list(db[COLLECTION_NAME].aggregate(pipeline))
+        for doc in age_results:
+            age = doc["_id"] or '青職以上'
+            if age not in age_categories:
+                age = '青職以上'
+            result[age][main_district] = _trimmed_mean(doc.get("weekly", []))
+
+        logger.info(f"Year trimmed mean by age for {main_district}: {result}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to calculate yearly trimmed mean by age for {main_district}: {str(e)}")
+        return {age: {} for age in ['青職以上', '大專', '中學', '小學', '學齡前']}

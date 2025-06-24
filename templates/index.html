@@ -49,6 +49,7 @@
         <div class="button-container">
             {% if not is_anonymous %}
             <a href="{{ url_for('average_attendance') }}" class="button">查看半年平均出席</a>
+            <a href="{{ url_for('yearly_average_attendance') }}" class="button">查看全年平均出席</a>
             <a href="{{ url_for('history') }}" class="button">查看週報表歷史紀錄</a>
             {% endif %}
 
