@@ -295,12 +295,12 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
     # ------------------------------------------------------------------
     # 4. Build the right-hand stats table (trimmed means for each event)
     # ------------------------------------------------------------------
-    num_districts = num_sub_districts + 2  # main + subs + label
+    num_districts = num_sub_districts + 3  # extra column for age groups
     html += (
         f'<div class="table-wrapper stats-wrapper flex-item" '
         f'style="--num-districts:{num_districts};">\n'
         '<table class="excel-table">\n'
-        '<tr class="header"><th style="min-width:2em">Avg</th>'
+        '<tr class="header"><th style="min-width:2em">Avg</th><th></th>'
         f'<th style="min-width:1em">{main_district}</th>'
     )
     for d in districts:
@@ -308,31 +308,53 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
     html += '</tr>\n'
 
     row_index = 0
-    # Each row represents one event: 主日, 禱告, 晨興, 小排…
+    age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
+
     for data in trimmed_mean_data_list:
         if not any(data["districts"].values()) and not data["counts"].get(main_district):
             continue
-        row_cls = "even" if row_index % 2 == 0 else "odd"
-        html += (
-            f'<tr class="{row_cls}"><td style="min-width:2em">{data["event_name"]}</td>'
-            f'<td style="min-width:1em">{data["counts"].get(main_district, 0)}</td>'
-        )
-        for d in districts:
-            html += f'<td style="min-width:1em">{data["districts"].get(d, 0)}</td>'
-        html += '</tr>\n'
-        row_index += 1
 
-    age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
-    for age in age_categories:
-        row_cls = "even" if row_index % 2 == 0 else "odd"
-        html += (
-            f'<tr class="{row_cls}"><td style="min-width:2em">{age}</td>'
-            f'<td style="min-width:1em">{age_group_data.get(age, {}).get(main_district, 0)}</td>'
-        )
-        for d in districts:
-            html += f'<td style="min-width:1em">{age_group_data.get(age, {}).get(d, 0)}</td>'
+        event_name = data["event_name"]
+        if event_name == "主日":
+            rowspan = len(age_categories) + 1
+            for idx, age in enumerate(age_categories):
+                row_cls = "even" if row_index % 2 == 0 else "odd"
+                if idx == 0:
+                    html += (
+                        f'<tr class="{row_cls}"><td rowspan="{rowspan}" style="min-width:2em">{event_name}</td>'
+                        f'<td style="min-width:2em">{age}</td>'
+                        f'<td style="min-width:1em">{age_group_data.get(age, {}).get(main_district, 0)}</td>'
+                    )
+                else:
+                    html += (
+                        f'<tr class="{row_cls}"><td style="min-width:2em">{age}</td>'
+                        f'<td style="min-width:1em">{age_group_data.get(age, {}).get(main_district, 0)}</td>'
+                    )
+                for d in districts:
+                    html += f'<td style="min-width:1em">{age_group_data.get(age, {}).get(d, 0)}</td>'
+                html += '</tr>\n'
+                row_index += 1
+
+            row_cls = "even" if row_index % 2 == 0 else "odd"
+            html += (
+                f'<tr class="{row_cls}"><td style="min-width:2em">總數</td>'
+                f'<td style="min-width:1em">{data["counts"].get(main_district, 0)}</td>'
+            )
+            for d in districts:
+                html += f'<td style="min-width:1em">{data["districts"].get(d, 0)}</td>'
+            html += '</tr>\n'
+            row_index += 1
+        else:
+            row_cls = "even" if row_index % 2 == 0 else "odd"
+            html += (
+                f'<tr class="{row_cls}"><td style="min-width:2em">{event_name}</td><td></td>'
+                f'<td style="min-width:1em">{data["counts"].get(main_district, 0)}</td>'
+            )
+            for d in districts:
+                html += f'<td style="min-width:1em">{data["districts"].get(d, 0)}</td>'
+            html += '</tr>\n'
+            row_index += 1
         html += '</tr>\n'
-        row_index += 1
 
     html += '</table>\n</div>\n'   # end stats-wrapper
     html += '</div>\n</div>\n'     # end container / section
