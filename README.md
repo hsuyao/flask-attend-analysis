@@ -6,6 +6,8 @@ This is a Flask web application for analyzing attendance data from Excel files. 
 - Upload an Excel file (`.xls` or `.xlsx`) with attendance data.
 - Convert `.xls` files to `.xlsx` using `soffice` (LibreOffice command-line tool).
 - Analyze attendance by week, district, and age group.
+- View six-month trimmed mean statistics with age breakdown under the
+  "主日" event.
 - Highlight names in light green if they attended this week but not last week.
 - Highlight names in light red if they attended last week but not this week.
 - Sort highlighted names to the top of the list.

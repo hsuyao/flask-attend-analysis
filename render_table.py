@@ -354,7 +354,6 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
                 html += f'<td style="min-width:1em">{data["districts"].get(d, 0)}</td>'
             html += '</tr>\n'
             row_index += 1
-        html += '</tr>\n'
 
     html += '</table>\n</div>\n'   # end stats-wrapper
     html += '</div>\n</div>\n'     # end container / section
