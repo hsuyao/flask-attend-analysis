@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_file, redirect, url_for, session, render_template
 from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
 from io import BytesIO
 import uuid
 import os
@@ -33,6 +34,10 @@ app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 Session(app)
+CSRFProtect(app)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = True
 app.config['DB_OFFLINE'] = DB_OFFLINE          # 供 template 使用
 app.register_blueprint(admin_bp)
 
