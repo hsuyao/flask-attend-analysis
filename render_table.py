@@ -1,6 +1,11 @@
 from config import logger, db, DB_OFFLINE, COLLECTION_NAME
 from utils import chinese_to_int, parse_district, parse_week_display
-from database import get_six_month_averages, get_all_latest_attendance_dates, get_six_month_trimmed_mean_by_event
+from database import (
+    get_six_month_averages,
+    get_all_latest_attendance_dates,
+    get_six_month_trimmed_mean_by_event,
+    get_six_month_trimmed_mean_by_age_group,
+)
 from datetime import datetime
 from datetime import timedelta
 
@@ -184,85 +189,8 @@ def render_attendance_table(week_display, latest_attendance_data, all_attendance
         html = '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>該週無有效資料</th></tr></table></div>'
     return html
 
-def render_average_attendance_table(main_district, end_date, trimmed_mean_data_list):
-    districts = sorted(
-        [d for d in trimmed_mean_data_list[0]["districts"].keys() if d.startswith(main_district)],
-        key=parse_district
-    )
-    if not districts:
-        return '<div class="district-section"><table class="excel-table"><tr class="title-row"><th>無資料</th></tr></table></div>'
 
-    # Get names and their attendance rates for 主日
-    pipeline = [
-        {"$match": {
-            "district": {"$regex": f"^{main_district}"},
-            "event_name": "主日"
-        }},
-        {"$group": {
-            "_id": {"district": "$district", "name": "$name"},
-            "attendance_rate": {"$avg": {"$cond": [{"$eq": ["$attended", 1]}, 1, 0]}}
-        }}
-    ]
-    name_records = list(db[COLLECTION_NAME].aggregate(pipeline))
-    district_names = {d: [] for d in districts}
-    for record in name_records:
-        district = record["_id"]["district"]
-        if district in district_names:
-            district_names[district].append((record["_id"]["name"], record["attendance_rate"]))
-
-    # Sort names by attendance rate (descending)
-    for district in district_names:
-        district_names[district].sort(key=lambda x: -x[1])
-
-    max_len = max(len(names) for names in district_names.values())
-    num_sub_districts = len(districts)
-    total_cols = num_sub_districts * 2
-
-    html = f'<div class="district-section">\n<h2>{main_district} - 半年平均出席</h2>\n<div class="district-container flex-container" style="--num-sub-districts: {num_sub_districts}; --num-districts: {num_sub_districts + 1};">\n'
-    html += f'<div class="table-wrapper attendance-wrapper flex-item" style="--num-sub-districts: {num_sub_districts};">\n<table class="excel-table">\n'
-    html += f'<tr class="header"><th colspan="{total_cols}">{main_district}</th></tr>\n<tr class="district-row">\n'
-    for district in districts:
-        html += f'<th colspan="2">{district}</th>'
-    html += '</tr>\n<tr class="subheader">\n'
-    for _ in districts:
-        html += '<th>名字</th><th>到會率</th>'
-    html += '</tr>\n'
-
-    for r in range(max_len):
-        row_class = "even" if r % 2 == 0 else "odd"
-        html += f'<tr class="{row_class}">\n'
-        for district in districts:
-            name_info = district_names.get(district, [])[r] if r < len(district_names.get(district, [])) else ('', 0.0)
-            name, rate = name_info
-            display_name = name[:4] if len(name) > 4 else name
-            html += f'<td>{display_name}</td><td>{rate:.0%}</td>'
-        html += '</tr>\n'
-    html += '</table>\n</div>\n'
-
-    # Render stats table for trimmed mean, with all events
-    num_districts = num_sub_districts + 1 + 1  # Add one for extra character width
-    html += f'<div class="table-wrapper stats-wrapper flex-item" style="--num-districts: {num_districts};">\n<table class="excel-table">\n'
-    html += f'<tr class="header"><th style="min-width: 2em; max-width: 2em;">平均</th><th style="min-width: 1em; max-width: 1em;">{main_district}</th>'
-    for district in districts:
-        html += f'<th style="min-width: 1em; max-width: 1em;">{district}</th>'
-    html += '</tr>\n'
-
-    # Render rows for each event dynamically
-    for i, trimmed_mean_data in enumerate(trimmed_mean_data_list):
-        event_name = trimmed_mean_data["event_name"]
-        if not any(trimmed_mean_data["districts"].values()) and not trimmed_mean_data["counts"].get(main_district):
-            continue
-        row_class = "even" if i % 2 == 0 else "odd"
-        html += f'<tr class="{row_class}"><td style="min-width: 2em; max-width: 2em;">{event_name}</td><td style="min-width: 1em; max-width: 1em;">{trimmed_mean_data["counts"].get(main_district, 0)}</td>'
-        for district in districts:
-            html += f'<td style="min-width: 1em; max-width: 1em;">{trimmed_mean_data["districts"].get(district, 0)}</td>'
-        html += '</tr>\n'
-
-    html += '</table>\n</div>\n'
-    html += '</div>\n</div>\n'
-    return html
-
-def render_average_attendance_table(main_district, end_date, trimmed_mean_data_list):
+def render_average_attendance_table(main_district, end_date, trimmed_mean_data_list, age_group_data):
     """
     Build the HTML table that shows each person’s 6-month average attendance rate
     for the given `main_district`, using `end_date` as the right edge of the window.
@@ -276,6 +204,9 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
     trimmed_mean_data_list : list[dict]
         Output of `get_six_month_trimmed_mean_by_event`, already filtered
         for the same main district and date window.
+    age_group_data : dict
+        Output of `get_six_month_trimmed_mean_by_age_group` for the same
+        main district and date window.
 
     Returns
     -------
@@ -376,12 +307,12 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
         html += f'<th style="min-width:1em">{d}</th>'
     html += '</tr>\n'
 
+    row_index = 0
     # Each row represents one event: 主日, 禱告, 晨興, 小排…
-    for i, data in enumerate(trimmed_mean_data_list):
-        # Skip completely empty rows
+    for data in trimmed_mean_data_list:
         if not any(data["districts"].values()) and not data["counts"].get(main_district):
             continue
-        row_cls = "even" if i % 2 == 0 else "odd"
+        row_cls = "even" if row_index % 2 == 0 else "odd"
         html += (
             f'<tr class="{row_cls}"><td style="min-width:2em">{data["event_name"]}</td>'
             f'<td style="min-width:1em">{data["counts"].get(main_district, 0)}</td>'
@@ -389,6 +320,19 @@ def render_average_attendance_table(main_district, end_date, trimmed_mean_data_l
         for d in districts:
             html += f'<td style="min-width:1em">{data["districts"].get(d, 0)}</td>'
         html += '</tr>\n'
+        row_index += 1
+
+    age_categories = ['青職以上', '大專', '中學', '小學', '學齡前']
+    for age in age_categories:
+        row_cls = "even" if row_index % 2 == 0 else "odd"
+        html += (
+            f'<tr class="{row_cls}"><td style="min-width:2em">{age}</td>'
+            f'<td style="min-width:1em">{age_group_data.get(age, {}).get(main_district, 0)}</td>'
+        )
+        for d in districts:
+            html += f'<td style="min-width:1em">{age_group_data.get(age, {}).get(d, 0)}</td>'
+        html += '</tr>\n'
+        row_index += 1
 
     html += '</table>\n</div>\n'   # end stats-wrapper
     html += '</div>\n</div>\n'     # end container / section

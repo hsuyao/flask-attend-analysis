@@ -6,7 +6,15 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from excel_handler import process_excel, generate_excel
 from render_table import render_attendance_table, render_average_attendance_table
-from database import init_database, get_six_month_averages, get_event_name, get_event_totals, get_six_month_trimmed_mean, get_six_month_trimmed_mean_by_event
+from database import (
+    init_database,
+    get_six_month_averages,
+    get_event_name,
+    get_event_totals,
+    get_six_month_trimmed_mean,
+    get_six_month_trimmed_mean_by_event,
+    get_six_month_trimmed_mean_by_age_group,
+)
 from user import init_users_collection, create_user, verify_user, create_admin_if_not_exists
 from config import db, DB_OFFLINE, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
@@ -729,6 +737,9 @@ def get_average_attendance_data(district, date):
             data = get_six_month_trimmed_mean_by_event(district, end_date, event)
             if any(data["districts"].values()) or data["counts"].get(district):
                 trimmed_mean_data_list.append(data)
+
+        # Get trimmed mean data by age group
+        age_group_data = get_six_month_trimmed_mean_by_age_group(district, end_date)
         
         if not trimmed_mean_data_list:
             logger.warning(f"No average attendance data for {district} up to {date}")
@@ -738,7 +749,12 @@ def get_average_attendance_data(district, date):
 
         # Sort by event name to ensure consistent order
         trimmed_mean_data_list.sort(key=lambda x: x["event_name"])
-        attendance_table_html = render_average_attendance_table(district, end_date, trimmed_mean_data_list)
+        attendance_table_html = render_average_attendance_table(
+            district,
+            end_date,
+            trimmed_mean_data_list,
+            age_group_data,
+        )
         logger.info(f"Rendered average attendance data for {district} up to {date}")
         return jsonify({'attendance_table': attendance_table_html})
     except ValueError:
