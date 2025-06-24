@@ -63,7 +63,8 @@
                                 $('#weekSelector').html(options);
                                 $('#weekSelector').prop('disabled', false);
                                 if (initialWeek) {
-                                    $('#weekSelector').val(initialWeek).trigger('change');
+                                    const encoded = encodeURIComponent(initialWeek);
+                                    $('#weekSelector').val(encoded).trigger('change');
                                     initialWeek = null;
                                 }
                             } else {
