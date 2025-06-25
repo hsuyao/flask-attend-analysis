@@ -1,180 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}點名報表統計首頁{% endblock %}
+{% block content %}
 {% if DB_OFFLINE %}
 <div style="background:#fff3cd;padding:8px;text-align:center;">
   資料庫離線，僅提供本地統計功能（歷史紀錄 / 管理介面停用）
 </div>
 {% endif %}
-<!DOCTYPE html>
-<html>
-<head>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <style>
-        .button-container {
-            margin: 10px 0;
-        }
-        .upload-form {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .upload-input {
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
-<body>
-    <h2>點名報表統計首頁</h2>
-    <div class="container upload-page">
-        <p class="instruction">
-            請上傳 Excel 檔案（.xls 或 .xlsx），系統將自動解析出席數據並生成統計報表。<br>
-            處理流程：<br>
-            1. 選擇檔案並上傳（可上傳最多四個檔案）<br>
-            2. 系統解析 Excel 並儲存數據<br>
-            3. 查看結果或下載處理後的檔案
-        </p>
-        {% if error %}
-        <p style="color: red; text-align: center;">{{ error }}</p>
-        {% endif %}
-        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="button-container">
-            <input type="file" name="file1" accept=".xls,.xlsx" class="upload-input">
-            <input type="file" name="file2" accept=".xls,.xlsx" class="upload-input">
-            <input type="file" name="file3" accept=".xls,.xlsx" class="upload-input">
-            <input type="file" name="file4" accept=".xls,.xlsx" class="upload-input">
-            <input type="button" value="執行上傳並統計" class="button" onclick="startUpload()">
-            </div>
-        </form>
+<h2>點名報表統計首頁</h2>
+<div class="upload-page">
+    <p class="instruction">
+        請上傳 Excel 檔案（.xls 或 .xlsx），系統將自動解析出席數據並生成統計報表。<br>
+        處理流程：<br>
+        1. 選擇檔案並上傳（可上傳最多四個檔案）<br>
+        2. 系統解析 Excel 並儲存數據<br>
+        3. 查看結果或下載處理後的檔案
+    </p>
+    {% if error %}
+    <p style="color: red; text-align: center;">{{ error }}</p>
+    {% endif %}
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="button-container">
-            {% if not is_anonymous %}
-            <a href="{{ url_for('average_attendance') }}" class="button">查看半年平均出席</a>
-            <a href="{{ url_for('yearly_average_attendance') }}" class="button">查看全年平均出席</a>
-            <a href="{{ url_for('history') }}" class="button">查看週報表歷史紀錄</a>
-            {% endif %}
-
-            {% if is_admin %}
-            <a href="{{ url_for('admin_bp.admin_home') }}" class="button admin">管理介面</a>
-            {% endif %}
-
-            <a href="{{ url_for('change_password_route') }}" class="button">變更密碼</a>
-            <a href="{{ url_for('logout') }}" class="button">登出</a>
+        <input type="file" name="file1" accept=".xls,.xlsx" class="upload-input">
+        <input type="file" name="file2" accept=".xls,.xlsx" class="upload-input">
+        <input type="file" name="file3" accept=".xls,.xlsx" class="upload-input">
+        <input type="file" name="file4" accept=".xls,.xlsx" class="upload-input">
+        <input type="button" value="執行上傳並統計" class="button" onclick="startUpload()">
         </div>
-    </div>
+    </form>
+    <div class="button-container">
+        {% if not is_anonymous %}
+        <a href="{{ url_for('average_attendance') }}" class="button">查看半年平均出席</a>
+        <a href="{{ url_for('yearly_average_attendance') }}" class="button">查看全年平均出席</a>
+        <a href="{{ url_for('history') }}" class="button">查看週報表歷史紀錄</a>
+        {% endif %}
 
-    <div class="modal fade" id="progressModal" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="progressModalLabel">正在處理檔案</h5>
-                </div>
-                <div class="modal-body">
-                    <div class="d-flex align-items-center">
-                        <div class="spinner-border me-3" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <div>
-                            <p id="progressStage">初始化...</p>
-                            <div class="progress">
-                                <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
-                            </div>
+        {% if is_admin %}
+        <a href="{{ url_for('admin_bp.admin_home') }}" class="button admin">管理介面</a>
+        {% endif %}
+
+        <a href="{{ url_for('change_password_route') }}" class="button">變更密碼</a>
+        <a href="{{ url_for('logout') }}" class="button">登出</a>
+    </div>
+</div>
+
+<div class="modal fade" id="progressModal" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="progressModalLabel">正在處理檔案</h5>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border me-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div>
+                        <p id="progressStage">初始化...</p>
+                        <div class="progress">
+                            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <footer style="text-align: center; margin-top: 20px;">
-        <p>版本: {{ version }}</p>
-    </footer>
-
-    <script>
-        function startUpload() {
-            const form = $('#uploadForm');
-            const fileInputs = form.find('input[type="file"]');
-            let hasFile = false;
-            fileInputs.each(function() {
-                if (this.files.length > 0) {
-                    hasFile = true;
-                    return false;
-                }
-            });
-
-            if (!hasFile) {
-                alert('請至少選擇一個檔案！');
-                return;
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    function startUpload() {
+        const form = $('#uploadForm');
+        const fileInputs = form.find('input[type="file"]');
+        let hasFile = false;
+        fileInputs.each(function() {
+            if (this.files.length > 0) {
+                hasFile = true;
+                return false;
             }
-
-            const modal = new bootstrap.Modal(document.getElementById('progressModal'), { backdrop: 'static', keyboard: false });
-            modal.show();
-            $('#progressStage').text('正在上傳檔案...');
-            $('#progressBar').css('width', '10%').text('10%');
-
-            const formData = new FormData(form[0]);
-            $.ajax({
-                url: '/upload',
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function(response) {
-                    if (response.task_id) {
-                        pollTaskStatus(response.task_id, modal);
-                    } else {
-                        modal.hide();
-                        alert('上傳失敗：' + (response.error || '未知錯誤'));
-                    }
-                },
-                error: function(xhr) {
-                    modal.hide();
-                    alert('上傳失敗：' + (xhr.responseJSON?.error || '伺服器錯誤'));
-                }
-            });
+        });
+        if (!hasFile) {
+            alert('請至少選擇一個檔案！');
+            return;
         }
-
-        function pollTaskStatus(taskId, modal) {
-            const interval = setInterval(function() {
-                $.ajax({
-                    url: '/task_status/' + taskId,
-                    type: 'GET',
-                    success: function(response) {
-                        $('#progressStage').text(response.stage);
-                        $('#progressBar').css('width', response.progress + '%').text(response.progress + '%');
-                        if (response.state === 'SUCCESS') {
-                            clearInterval(interval);
-                            $.ajax({
-                                url: '/task_result/' + taskId,
-                                type: 'GET',
-                                success: function(result) {
-                                    if (result.status === 'success') {
-                                        modal.hide();
-                                        window.location.href = result.redirect;
-                                    } else {
-                                        modal.hide();
-                                        alert('處理失敗：' + result.error);
-                                    }
-                                },
-                                error: function() {
+        const modal = new bootstrap.Modal(document.getElementById('progressModal'), { backdrop: 'static', keyboard: false });
+        modal.show();
+        $('#progressStage').text('正在上傳檔案...');
+        $('#progressBar').css('width', '10%').text('10%');
+        const formData = new FormData(form[0]);
+        $.ajax({
+            url: '/upload',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.task_id) {
+                    pollTaskStatus(response.task_id, modal);
+                } else {
+                    modal.hide();
+                    alert('上傳失敗：' + (response.error || '未知錯誤'));
+                }
+            },
+            error: function(xhr) {
+                modal.hide();
+                alert('上傳失敗：' + (xhr.responseJSON?.error || '伺服器錯誤'));
+            }
+        });
+    }
+    function pollTaskStatus(taskId, modal) {
+        const interval = setInterval(function() {
+            $.ajax({
+                url: '/task_status/' + taskId,
+                type: 'GET',
+                success: function(response) {
+                    $('#progressStage').text(response.stage);
+                    $('#progressBar').css('width', response.progress + '%').text(response.progress + '%');
+                    if (response.state === 'SUCCESS') {
+                        clearInterval(interval);
+                        $.ajax({
+                            url: '/task_result/' + taskId,
+                            type: 'GET',
+                            success: function(result) {
+                                if (result.status === 'success') {
                                     modal.hide();
-                                    alert('無法儲存任務結果');
+                                    window.location.href = result.redirect;
+                                } else {
+                                    modal.hide();
+                                    alert('處理失敗：' + result.error);
                                 }
-                            });
-                        } else if (response.state === 'FAILURE') {
-                            clearInterval(interval);
-                            modal.hide();
-                            alert('處理失敗：' + response.error);
-                        }
-                    },
-                    error: function() {
+                            },
+                            error: function() {
+                                modal.hide();
+                                alert('無法儲存任務結果');
+                            }
+                        });
+                    } else if (response.state === 'FAILURE') {
                         clearInterval(interval);
                         modal.hide();
-                        alert('無法獲取任務狀態');
+                        alert('處理失敗：' + response.error);
                     }
-                });
-            }, 1000);
-        }
-    </script>
-</body>
-</html>
+                },
+                error: function() {
+                    clearInterval(interval);
+                    modal.hide();
+                    alert('無法獲取任務狀態');
+                }
+            });
+        }, 1000);
+    }
+</script>
+{% endblock %}
+
