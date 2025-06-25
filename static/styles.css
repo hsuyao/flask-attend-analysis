@@ -140,7 +140,8 @@ h2 {
 
 .attendance-wrapper {
     width: calc(var(--num-sub-districts, 3) * 9 * 0.875rem + 7.125rem); /* Dynamic width: 9 chars per sub-district + 6-char buffer */
-    max-height: 70vh;
+    /* Limit height to roughly 25 rows so long lists can scroll */
+    max-height: calc(25 * 1.5em);
     flex: none;
     overflow-x: auto; /* Enable horizontal scrollbar */
     overflow-y: auto;
@@ -312,6 +313,8 @@ h2 {
     }
     .attendance-wrapper {
         width: calc(var(--num-sub-districts, 3) * 6 * 0.75rem + 5.25rem);
+        /* Same height limit on narrow screens */
+        max-height: calc(25 * 1.5em);
     }
     .attendance-wrapper .excel-table {
         width: calc(var(--num-sub-districts, 3) * 6 * 0.75rem + 5.25rem); /* Dynamic width at 12px font + 6-char buffer */
