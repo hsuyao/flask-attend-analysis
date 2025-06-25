@@ -134,3 +134,34 @@ def create_admin_if_not_exists(admin_username, admin_password):
         except Exception as e:
             logger.error(f"Failed to create admin user {admin_username}: {str(e)}")
             raise
+
+def change_password(username, old_password, new_password):
+    """Change password for a logged in user."""
+    if DB_OFFLINE:
+        logger.warning("離線模式：停用 change_password")
+        return False
+
+    collection = db["users"]
+    user = collection.find_one({"username": username})
+    if not user or not check_password_hash(user.get("password", ""), old_password):
+        return False
+
+    hashed = generate_password_hash(new_password, method='pbkdf2:sha256')
+    result = collection.update_one({"username": username}, {"$set": {"password": hashed}})
+    return result.modified_count == 1
+
+
+def reset_password(username, email, new_password):
+    """Reset password when the user cannot log in."""
+    if DB_OFFLINE:
+        logger.warning("離線模式：停用 reset_password")
+        return False
+
+    collection = db["users"]
+    user = collection.find_one({"username": username, "email": email})
+    if not user:
+        return False
+
+    hashed = generate_password_hash(new_password, method='pbkdf2:sha256')
+    result = collection.update_one({"username": username}, {"$set": {"password": hashed}})
+    return result.modified_count == 1

@@ -22,7 +22,14 @@ from database import (
     get_year_trimmed_mean_by_event,
     get_year_trimmed_mean_by_age_group,
 )
-from user import init_users_collection, create_user, verify_user, create_admin_if_not_exists
+from user import (
+    init_users_collection,
+    create_user,
+    verify_user,
+    create_admin_if_not_exists,
+    change_password,
+    reset_password,
+)
 from config import db, DB_OFFLINE, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
@@ -217,6 +224,52 @@ def register():
             return redirect(url_for('login'))
         return render_template('register.html', error="使用者名稱已存在", version=get_version_info())
     return render_template('register.html', version=get_version_info())
+
+
+@app.route('/change_password', methods=['GET', 'POST'])
+def change_password_route():
+    if not is_authenticated():
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        old_pw = request.form.get('old_password')
+        new_pw = request.form.get('new_password')
+        if change_password(session['user']['username'], old_pw, new_pw):
+            session.pop('user', None)
+            return render_template(
+                'change_password.html',
+                success="密碼已更新，請重新登入",
+                version=get_version_info()
+            )
+        return render_template(
+            'change_password.html',
+            error="舊密碼不正確",
+            version=get_version_info()
+        )
+    return render_template('change_password.html', version=get_version_info())
+
+
+@app.route('/reset_password', methods=['GET', 'POST'])
+def reset_password_route():
+    if DB_OFFLINE:
+        return render_template(
+            'reset_password.html',
+            error="資料庫離線，無法重設密碼",
+            version=get_version_info()
+        )
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        new_pw = request.form.get('new_password')
+        if reset_password(username, email, new_pw):
+            return redirect(url_for('login'))
+        return render_template(
+            'reset_password.html',
+            error="帳號與信箱不符",
+            version=get_version_info()
+        )
+    return render_template('reset_password.html', version=get_version_info())
 
 @app.route('/logout')
 def logout():

@@ -12,6 +12,8 @@ This is a Flask web application for analyzing attendance data from Excel files. 
 - Highlight names in light red if they attended last week but not this week.
 - Sort highlighted names to the top of the list.
 - Download the processed Excel file with new summary sheets.
+- Change password after logging in.
+- Reset password using username and registered email if you cannot log in.
 
 ## Prerequisites
 - Python 3.8 or higher
