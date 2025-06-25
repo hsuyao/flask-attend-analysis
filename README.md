@@ -24,4 +24,11 @@ This is a Flask web application for analyzing attendance data from Excel files. 
    - On Ubuntu/Debian:
      ```bash
      sudo apt update
-     sudo apt install libreoffice
+    sudo apt install libreoffice
+
+## Configuration
+
+The application uses a secret key for session management. When deploying over
+HTTPS, set the environment variable `SESSION_COOKIE_SECURE=true` so that session
+cookies are marked secure. Leave this variable unset for local development over
+HTTP.
