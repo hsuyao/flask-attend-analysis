@@ -38,7 +38,7 @@
         <p style="color: red; text-align: center;">{{ error }}</p>
         {% endif %}
         <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
-            {{ csrf_token() }}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="button-container">
             <input type="file" name="file1" accept=".xls,.xlsx" class="upload-input">
             <input type="file" name="file2" accept=".xls,.xlsx" class="upload-input">
