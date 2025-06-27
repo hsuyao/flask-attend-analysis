@@ -270,3 +270,20 @@ def admin_db_status():
         "collections": stats["collections"],
         "objects":     stats["objects"]
     })
+
+# ------------------------------------------------------------------------------
+#  Event log viewer
+# ------------------------------------------------------------------------------
+@admin_bp.route("/eventlog")
+def event_log_page():
+    if DB_OFFLINE:
+        return "Database offline", 503
+    if not is_admin():
+        return "Forbidden", 403
+
+    logs = list(db["event_log"].find().sort("ts", -1).limit(200))
+    return render_template(
+        "admin_eventlog.html",
+        version=current_app.config.get("VERSION", "dev"),
+        logs=logs,
+    )
