@@ -10,7 +10,6 @@ import csv, re, os, math
 from config import db, DB_OFFLINE, COLLECTION_NAME
 from user import update_user_role, block_user, unblock_user, delete_user
 from utils import parse_week_display   # 若後續用不到可移除
-from eventlog import log_event
 
 # --- helper: avoid circular import ---
 def is_admin():
@@ -79,8 +78,6 @@ def admin_update_role():
     username = request.json.get("username")
     new_role = request.json.get("role")
     ok = update_user_role(username, new_role)
-    if ok:
-        log_event("admin_update_role", session.get('user', {}).get('username'), details={"target": username, "role": new_role})
     return jsonify({"success": ok})
 
 # ------------------------------------------------------------------------------
@@ -92,8 +89,6 @@ def admin_block():
         return jsonify({"error":"forbidden"}), 403
     username = request.json.get("username")
     ok = block_user(username)
-    if ok:
-        log_event("admin_block", session.get('user', {}).get('username'), details={"target": username})
     return jsonify({"success": ok})
 
 @admin_bp.route("/users/unblock", methods=["POST"])
@@ -102,8 +97,6 @@ def admin_unblock():
         return jsonify({"error":"forbidden"}), 403
     username = request.json.get("username")
     ok = unblock_user(username)
-    if ok:
-        log_event("admin_unblock", session.get('user', {}).get('username'), details={"target": username})
     return jsonify({"success": ok})
 
 # ------------------------------------------------------------------------------
@@ -115,8 +108,6 @@ def admin_delete_user():
         return jsonify({"error":"forbidden"}), 403
     username = request.json.get("username")
     ok = delete_user(username)
-    if ok:
-        log_event("admin_delete_user", session.get('user', {}).get('username'), details={"target": username})
     return jsonify({"success": ok})
 
 # ------------------------------------------------------------------------------
