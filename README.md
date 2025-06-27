@@ -14,7 +14,7 @@ This is a Flask web application for analyzing attendance data from Excel files. 
 - Download the processed Excel file with new summary sheets.
 - Change password after logging in.
 - Reset password using username and registered email if you cannot log in.
-- Event log tracks logins and admin actions (keeps last 100k entries).
+- Event log tracks logins and admin actions (keeps last 100k entries and archives older records).
 
 ## Prerequisites
 - Python 3.8 or higher
