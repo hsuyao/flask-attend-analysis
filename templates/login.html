@@ -1,5 +1,12 @@
 {% extends 'base.html' %}
 {% block title %}登入{% endblock %}
+{% block head %}
+<style>
+    .login-container {max-width: 360px;margin: 50px auto;padding: 20px;background: #fff;border-radius: 8px;box-shadow: 0 0 10px rgba(0,0,0,0.1);}
+    .form-group {margin-bottom: 15px;}
+    .button-container {text-align: center;}
+</style>
+{% endblock %}
 {% block content %}
 <div class="login-container">
     <h2>登入系統</h2>
