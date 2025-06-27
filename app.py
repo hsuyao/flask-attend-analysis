@@ -30,6 +30,7 @@ from user import (
     change_password,
     reset_password,
 )
+from eventlog import init_eventlog_collection, log_event
 from config import db, DB_OFFLINE, COLLECTION_NAME
 from utils import parse_district, chinese_to_int, parse_week_display
 from datetime import datetime
@@ -66,6 +67,7 @@ if not DB_OFFLINE:
         if not (admin_username and admin_password):
             raise ValueError("Admin credentials not set")
         create_admin_if_not_exists(admin_username, admin_password)
+        init_eventlog_collection()
         logger.info("資料庫初始化完成")
     except Exception as e:
         logger.error(f"DB init error: {e}")
@@ -192,7 +194,9 @@ def login():
                 'role': user['role']
             }
             logger.info(f"User {username} logged in successfully")
+            log_event("login", username=user['username'])
             return redirect(url_for('index'))
+        log_event("login_failed", username=username)
         return render_template('login.html', error="無效的使用者名稱或密碼", version=get_version_info())
     return render_template('login.html', version=get_version_info())
 
@@ -203,6 +207,7 @@ def anonymous_login():
         'role': 'anonymous'
     }
     logger.info("Anonymous user logged in")
+    log_event("anonymous_login")
     return redirect(url_for('index'))
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -221,6 +226,7 @@ def register():
         password = request.form.get('password')
         if create_user(username, email, password):
             logger.info(f"User {username} registered successfully")
+            log_event("register", username=username)
             return redirect(url_for('login'))
         return render_template('register.html', error="使用者名稱已存在", version=get_version_info())
     return render_template('register.html', version=get_version_info())
@@ -235,6 +241,7 @@ def change_password_route():
         old_pw = request.form.get('old_password')
         new_pw = request.form.get('new_password')
         if change_password(session['user']['username'], old_pw, new_pw):
+            log_event("change_password", username=session['user']['username'])
             session.pop('user', None)
             return render_template(
                 'change_password.html',
@@ -263,6 +270,7 @@ def reset_password_route():
         email = request.form.get('email')
         new_pw = request.form.get('new_password')
         if reset_password(username, email, new_pw):
+            log_event("reset_password", username=username)
             return redirect(url_for('login'))
         return render_template(
             'reset_password.html',
@@ -275,6 +283,7 @@ def reset_password_route():
 def logout():
     session.pop('user', None)
     logger.info("User logged out")
+    log_event("logout")
     return redirect(url_for('login'))
 
 @app.route('/upload', methods=['POST'])
@@ -310,6 +319,11 @@ def upload_file():
             save_to_db=(not is_anonymous and not DB_OFFLINE)
         )
         logger.info(f"Started background task: {task_id}")
+        log_event(
+            "upload",
+            username=session.get('user', {}).get('username'),
+            details={"file_count": len(files)}
+        )
         return jsonify({"task_id": task_id}), 202
     except Exception as e:
         logger.error(f"Failed to start task: {str(e)}")
