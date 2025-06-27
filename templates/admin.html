@@ -185,7 +185,7 @@ $(document).ready(()=>loadPage(1));
 function loadDbStatus(){
   $.getJSON('/admin/db_status', res=>{
       $('#dbStatus').text(
-        `資料庫已用 ${res.storage_mb} MB / ${res.quota_mb} MB，`+
+        `資料庫已用 ${res.used_mb} MB / ${res.quota_mb} MB，`+
         `剩餘 ${res.remain_mb} MB ｜ `+
         `Collections: ${res.collections} ｜ Documents: ${res.objects}`
       );

@@ -248,12 +248,14 @@ def admin_db_status():
 
     # MongoDB dbStats
     stats = db.command("dbStats")
-    storage_mb = stats["storageSize"] / (1024 * 1024)          # 已用 MB
+    # 使用 dataSize + indexSize 以符合 MongoDB 網站的用量顯示
+    used_bytes = stats.get("dataSize", 0) + stats.get("indexSize", 0)
+    used_mb    = used_bytes / (1024 * 1024)
     quota_mb   = float(os.getenv("DB_QUOTA_MB", 512))          # 預設 512 MB，可用環境變數覆蓋
-    remain_mb  = max(0.0, quota_mb - storage_mb)
+    remain_mb  = max(0.0, quota_mb - used_mb)
 
     return jsonify({
-        "storage_mb": round(storage_mb, 1),
+        "used_mb":   round(used_mb, 1),
         "quota_mb":   quota_mb,
         "remain_mb":  round(remain_mb, 1),
         "collections": stats["collections"],
