@@ -270,3 +270,46 @@ def admin_db_status():
         "collections": stats["collections"],
         "objects":     stats["objects"]
     })
+
+# ------------------------------------------------------------------------------
+#  Event log viewer
+# ------------------------------------------------------------------------------
+@admin_bp.route("/logs")
+def admin_logs():
+    if DB_OFFLINE:
+        return "Database offline", 503
+    if not is_admin():
+        return "Forbidden", 403
+    log_event("view_event_logs", session.get('user', {}).get('username'))
+    return render_template("admin_logs.html", version=current_app.config.get("VERSION", "dev"))
+
+
+@admin_bp.route("/logs/data")
+def admin_logs_data():
+    if DB_OFFLINE:
+        return jsonify({"error": "db offline"}), 503
+    if not is_admin():
+        return jsonify({"error": "forbidden"}), 403
+
+    page     = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 20))
+    sort_by  = request.args.get("sort", "ts")
+    order    = int(request.args.get("order", -1))
+
+    cursor = db["event_log"].find().sort(sort_by, order)
+    total  = db["event_log"].count_documents({})
+    cursor = cursor.skip((page - 1) * per_page).limit(per_page)
+
+    records = []
+    for doc in cursor:
+        ts = doc.get("ts")
+        if isinstance(ts, datetime):
+            ts = ts.strftime("%Y-%m-%d %H:%M:%S")
+        records.append({
+            "ts": ts,
+            "action": doc.get("action", ""),
+            "username": doc.get("username", ""),
+            "details": doc.get("details")
+        })
+
+    return jsonify({"total": total, "records": records})
