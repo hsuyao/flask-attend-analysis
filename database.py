@@ -128,6 +128,24 @@ def get_week_attendance_count(week_display, district, event_name):
         logger.error(f"Failed to get attendance count for {week_display}, {district}, {event_name}: {str(e)}")
         return 0
 
+def week_has_attendance(week_display, event_name):
+    """Return True if any attended record exists for the given week and event."""
+    try:
+        count = db[COLLECTION_NAME].count_documents(
+            {
+                "week_display": week_display,
+                "event_name": event_name,
+                "attended": 1,
+            },
+            limit=1,
+        )
+        return count > 0
+    except Exception as e:
+        logger.error(
+            f"Failed to check attendance existence for {week_display}, {event_name}: {str(e)}"
+        )
+        return False
+
 def get_all_latest_attendance_dates(names=None, placeholder_date=None):
     """Return latest week_display for every name, or list of all week_displays.
        - 連線正常 → 查 Mongo

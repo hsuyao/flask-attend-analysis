@@ -7,7 +7,14 @@ import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from config import START_COLUMN, DB_TYPE
 from utils import chinese_to_int, parse_district, parse_week_display
-from database import get_six_month_averages, bulk_write, find_existing, get_all_latest_attendance_dates, get_week_attendance_count
+from database import (
+    get_six_month_averages,
+    bulk_write,
+    find_existing,
+    get_all_latest_attendance_dates,
+    get_week_attendance_count,
+    week_has_attendance,
+)
 import time
 import logging
 from pymongo import UpdateOne
@@ -285,11 +292,20 @@ def process_excel(file_stream, file_extension, save_to_db=True):
         existing_cache = set((name, week, evt) for name, week, evt in existing_keys)
 
         operations = []
+        last_week_display = all_attendance_data[-1][2]
         for week_data in all_attendance_data:
             _, data, week_display, evt_name = week_data
             has_attendees = any(data['attended'].values())
             if not has_attendees:
                 logger.info(f"Skipping week {week_display} due to no attendees")
+                continue
+
+            existing = week_has_attendance(week_display, evt_name)
+            is_last_week = week_display == last_week_display
+            if existing and not is_last_week:
+                logger.info(
+                    f"Skipping overwrite for {week_display} due to existing records"
+                )
                 continue
 
             # Check attendance count in database for each district
