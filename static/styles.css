@@ -292,9 +292,9 @@ h2 {
 }
 
 .upload-input {
-    width: auto;
+    width: 100%;
     max-width: 100%;
-
+}
 /* Responsive Design */
 @media (max-width: 768px) {
     .container {
